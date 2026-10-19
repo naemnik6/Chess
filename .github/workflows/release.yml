@@ -1,19 +1,13 @@
 # Авто-сборка и публикация релизов Chess.
-# Как пользоваться:
-#   1) поднять версию в version.json и desktop/package.json;
-#   2) закоммитить и повесить тег:  git tag v2.3 && git push origin v2.3
-#   3) workflow сам соберёт веб-часть, установщики и опубликует GitHub-релиз
-#      с файлами и latest.yml — после этого electron-updater в приложении
-#      предложит обновление пользователям («⋮ → Справка → Проверить обновления»).
 name: release
 
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:          # ручной запуск из вкладки Actions
+  workflow_dispatch:
 
 permissions:
-  contents: write             # нужно для создания релиза и загрузки ассетов
+  contents: write
 
 jobs:
   tests:
@@ -30,7 +24,7 @@ jobs:
           node build.js
           node test.js
 
-  release-windows:            # основная целевая платформа — Windows
+  release-windows:
     needs: tests
     runs-on: windows-latest
     steps:
@@ -46,21 +40,5 @@ jobs:
       - name: Собрать и опубликовать релиз
         working-directory: desktop
         run: npx electron-builder --win --publish always
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release-linux:              # второстепенные платформы
-    needs: tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: node build.js
-      - working-directory: desktop
-        run: npm install
-      - working-directory: desktop
-        run: npx electron-builder --linux --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
