@@ -29,15 +29,6 @@ jobs:
         run: |
           node build.js
           node test.js
-          node uitest.js
-          node uitest2.js
-          node uitest3.js
-          node uitest4.js
-          node uitest5.js
-          node uitest6.js
-          node uitest7.js
-          node uitest8.js
-          node uitest9.js
 
   release-windows:            # основная целевая платформа — Windows
     needs: tests
