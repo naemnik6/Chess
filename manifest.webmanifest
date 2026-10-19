@@ -1,0 +1,58 @@
+{
+  "name": "Шахматы — игра за обе стороны, архив партий и статистика",
+  "short_name": "Шахматы",
+  "description": "Полные правила шахмат в одном файле: игра за обе стороны, компьютер, объявления шаха/мата/пата/ничьих, архив партий в PGN, профили соперников и место под внешние движки (Rodent IV).",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0b0e1c",
+  "theme_color": "#0b0e1c",
+  "lang": "ru",
+  "dir": "ltr",
+  "categories": ["games", "education"],
+  "icons": [
+    {
+      "src": "desktop/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "desktop/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "desktop/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "desktop/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Новая партия",
+      "short_name": "Партия",
+      "description": "Открыть доску и начать новую партию",
+      "url": "./index.html#new",
+      "icons": [{ "src": "desktop/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Архив партий",
+      "short_name": "Архив",
+      "description": "Сохранённые партии, место под архив, импорт и выгрузка PGN",
+      "url": "./index.html#archive",
+      "icons": [{ "src": "desktop/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

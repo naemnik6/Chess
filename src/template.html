@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e1c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="desktop/icons/icon-192.png">
+<link rel="apple-touch-icon" href="desktop/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Шахматы — игра за обе стороны</title>
+<meta name="description" content="Шахматы в браузере: играйте за обе стороны, полные правила, объявления шаха, мата, пата и всех видов ничьих, архив партий и статистика соперников.">
+<style>
+/*@STYLE@*/
+</style>
+</head>
+<body>
+<!--@PIECES@-->
+
+<noscript><div style="padding:24px;text-align:center;font:16px sans-serif;color:#e9ecfa;background:#131a33">Для игры в шахматы нужно включить JavaScript.</div></noscript>
+
+<div class="app">
+  <header class="top">
+    <div class="logo">
+      <div class="mark"><svg viewBox="0 0 45 45" aria-hidden="true"><use href="#pc-wN"/></svg></div>
+      <div>
+        <h1>Chess</h1>
+        <div class="sub">Полные правила · игра за обе стороны · архив партий</div>
+      </div>
+      <span class="head-status" id="headStatus" title="Текущее состояние партии">Ход белых</span>
+    </div>
+    <div class="top-right">
+      <button class="icon-btn icon-btn-lg" id="btnPanel" data-tip="Меню: ходы, журнал, архив, профили, настройки, позиция" aria-label="Открыть меню" aria-expanded="false">☰</button>
+      <!-- звук: нажимаешь кнопку — видишь шкалу -->
+      <div class="pop-wrap" id="soundPop">
+        <button class="icon-btn on" id="btnSound" data-tip="Звук: нажмите, чтобы настроить" aria-label="Звук" aria-expanded="false">🔊</button>
+        <div class="pop" id="soundPanel" role="dialog" aria-label="Настройки звука">
+          <div class="pop-title">Громкость</div>
+          <div class="vol-row">
+            <span class="vic" id="volIcon" title="Включить/выключить звук" role="button" tabindex="0">🔊</span>
+            <input type="range" class="vol" id="volRange" min="0" max="100" step="5" value="75" aria-label="Громкость звуков">
+            <span class="vol-val" id="volVal">75%</span>
+          </div>
+          <div class="pop-hint">Отдельные сигналы: ход, взятие, рокировка, превращение, шах, итог партии.</div>
+        </div>
+      </div>
+      <button class="icon-btn" id="btnHelp" data-tip="Правила, объявления и горячие клавиши" aria-label="Справка">?</button>
+      <!-- меню приложения: заменило нативную панель Партия/Вид/Инструменты/Справка -->
+      <div class="pop-wrap" id="appMenuPop">
+        <button class="icon-btn" id="btnAppMenu" data-tip="Меню приложения: партия, вид, инструменты, справка" aria-label="Меню приложения" aria-expanded="false">⋮</button>
+        <div class="pop pop-wide" id="appMenu" role="menu">
+          <div class="pop-title">Партия</div>
+          <div class="am-grid">
+            <button data-am="new" role="menuitem">Новая партия <span class="am-k">N</span></button>
+            <button data-am="undo" role="menuitem">Вернуть ход <span class="am-k">Z</span></button>
+            <button data-am="save" role="menuitem">Сохранить в архив</button>
+            <button data-am="offload" role="menuitem">Выгрузить архив…</button>
+          </div>
+          <div class="pop-title">Вид</div>
+          <div class="am-grid">
+            <button data-am="fullscreen" role="menuitem">Полный экран <span class="am-k">F11</span></button>
+            <button data-am="flip" role="menuitem">Перевернуть доску <span class="am-k">F</span></button>
+            <button data-am="panel" role="menuitem">Меню-панель <span class="am-k">M</span></button>
+            <button data-am="autoflip" role="menuitem">Автоповорот доски</button>
+          </div>
+          <div class="pop-title">Инструменты</div>
+          <div class="am-grid">
+            <button data-am="marks" role="menuitem">Стереть стрелки</button>
+            <button data-am="fen" role="menuitem">Копировать FEN</button>
+            <button data-am="pgn" role="menuitem">Копировать PGN</button>
+            <button data-am="lichess" role="menuitem">Открыть в Lichess</button>
+          </div>
+          <div class="pop-title">Справка</div>
+          <div class="am-grid">
+            <button data-am="help" role="menuitem">Правила и объявления</button>
+            <button data-am="updates" role="menuitem">Проверить обновления</button>
+            <button data-am="about" role="menuitem">О программе</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======= МАТЕРИАЛ + ДОСКА ======= -->
+    <section class="board-area">
+      <div class="cap-col" aria-label="Взятые фигуры и перевес материала">
+        <div class="cap-row" id="capTop"></div>
+        <div class="cap-row" id="capBottom"></div>
+      </div>
+      <div class="board-col">
+      <div class="board-frame">
+        <div class="board-clip">
+          <div class="board" id="board"></div>
+          <svg class="arrows" id="arrows" viewBox="0 0 8 8" aria-hidden="true"><g id="arrowLayer"></g></svg>
+        </div>
+        <div class="toast-wrap" id="toastWrap"></div>
+      </div>
+
+      <div class="playback" id="playbackBar" hidden>
+        <span class="pb-ic">📼</span>
+        <span class="pb-txt">Просмотр партии из архива: <b id="playbackTitle"></b></span>
+        <button class="btn btn-mini" id="btnClosePlayback">Вернуться к своей партии</button>
+      </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ======= ВЫДВИЖНОЕ МЕНЮ СО ВКЛАДКАМИ ======= -->
+<div class="drawer-bg" id="drawerBg"></div>
+<div class="app-drawer">
+  <aside class="panel" id="panel" aria-hidden="true">
+      <div class="panel-head">
+        <span class="ph-title">Меню</span>
+        <button class="icon-btn" id="btnPanelClose" data-tip="Закрыть меню (Esc)" aria-label="Закрыть меню">✕</button>
+      </div>
+      <div class="tabs" id="tabs" role="tablist">
+        <button data-tab="moves"    class="on" role="tab">Ходы</button>
+        <button data-tab="events"   role="tab">Журнал<span class="badge" id="evBadge" hidden>0</span></button>
+        <button data-tab="archive"  role="tab">Архив<span class="badge" id="arBadge" hidden>0</span></button>
+        <button data-tab="players"  role="tab">Профили</button>
+        <button data-tab="game"     role="tab">Игра</button>
+        <button data-tab="engine"   role="tab">Движок</button>
+        <button data-tab="position" role="tab">Позиция</button>
+      </div>
+
+      <div class="tab-body" id="tabBody">
+        <!-- ХОДЫ -->
+        <section data-panel="moves" class="on">
+          <div class="moves-status" id="statusCard">
+            <div class="sl-row">
+              <span class="swatch w" id="turnSwatch"></span>
+              <span class="big" id="statusBig">Ход белых</span>
+              <span class="sl-meta"><span id="statusTurn">№1</span><span class="result-tag" id="resultTag" title="Результат партии">—</span></span>
+            </div>
+            <div class="small" id="statusSmall"></div>
+          </div>
+          <div class="moves" id="moves"></div>
+          <div class="row between" style="margin-top:7px">
+            <span id="moveCount" class="hint">Ходов: 0</span>
+            <span class="hint">Клик по ходу — просмотр позиции</span>
+          </div>
+          <div class="tab-toolbar toolbar" id="toolbar" role="toolbar" aria-label="Управление партией">
+            <div class="tb-row">
+              <button data-act="first" data-tip="В начало партии">⏮</button>
+              <button data-act="prev"  data-tip="На ход назад">◀</button>
+              <button data-act="next"  data-tip="На ход вперёд">▶</button>
+              <button data-act="last"  data-tip="К последнему ходу">⏭</button>
+            </div>
+            <div class="tb-row">
+              <button data-act="undo"  data-tip="Вернуть ход (отменить последний)">↩</button>
+              <button data-act="reset" data-tip="Сбросить доску и начать заново">⟲</button>
+              <button data-act="flip"  data-tip="Перевернуть доску">⇅</button>
+              <button data-act="marks" data-tip="Стереть стрелки и пометки (правая кнопка мыши)">➶</button>
+              <button data-act="draw"   data-tip="Ничья по соглашению сторон" class="warn">½</button>
+              <button data-act="resign" data-tip="Сдаться: поражение стороны, чей ход" class="danger">⚑</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ЖУРНАЛ СОБЫТИЙ ЗА ВСЁ ВРЕМЯ -->
+        <section data-panel="events">
+          <div class="row between" style="margin-bottom:8px">
+            <span class="hint" id="logCount">Записей: 0</span>
+            <button class="btn btn-mini" id="btnClearLog">Очистить журнал</button>
+          </div>
+          <div class="log log-all" id="logAll"></div>
+        </section>
+
+        <!-- АРХИВ ПАРТИЙ -->
+        <section data-panel="archive">
+          <div class="row" style="margin-bottom:8px;gap:6px">
+            <input class="inp" id="archSearch" placeholder="Поиск по названию или игроку" aria-label="Поиск по архиву">
+          </div>
+          <div class="quota" id="quotaBox">
+            <div class="quota-row">
+              <span class="q-label">Место под архив</span>
+              <span class="q-pct" id="quotaPct">0%</span>
+            </div>
+            <div class="qbar" title="Заполнение бюджета архива; после 100 % расходуется резерв на 3 партии">
+              <span class="qf" id="quotaFill"></span>
+              <span class="qres" id="quotaReserve" title="Здесь начинается резерв на 3 партии"></span>
+            </div>
+            <div class="hint" id="quotaText"></div>
+            <details class="quota-help">
+              <summary>Сколько это партий и что будет при заполнении</summary>
+              <div class="hint" id="quotaHelp"></div>
+            </details>
+          </div>
+          <div class="arch-info" id="archInfo"></div>
+          <div class="btns3">
+            <button class="btn btn-mini" id="btnSaveGame" data-tip="Сохранить текущую партию в архив">💾 Текущую</button>
+            <button class="btn btn-mini" id="btnImportPgn" data-tip="Импортировать партии из PGN">⬆ Импорт</button>
+            <button class="btn btn-mini" id="btnExportAll" data-tip="Скачать все партии одним PGN-файлом">⬇ Экспорт</button>
+          </div>
+          <button class="btn btn-mini wide offload" id="btnOffload" data-tip="Скачать все партии и удалить их из браузера (статистика профилей останется)">
+            📦 Выгрузить всё и очистить архив
+          </button>
+          <div class="arch-list" id="archList"></div>
+        </section>
+
+        <!-- ПРОФИЛИ СОПЕРНИКОВ -->
+        <section data-panel="players">
+          <label class="chk"><input type="checkbox" id="chkCountAnon"> Учитывать партии без имени (анонимные) в статистике</label>
+          <div class="row between" style="margin:8px 0">
+            <span class="hint" id="playersCount">Профилей: 0</span>
+            <button class="btn btn-mini" id="btnClearAnon" data-tip="Обнулить сводный профиль «Аноним»">Очистить анонима</button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl" id="playersTable">
+              <thead><tr><th>Игрок</th><th title="Сыграно партий">И</th><th title="Победы">В</th><th title="Ничьи">Н</th><th title="Поражения">П</th><th title="Процент очков">%</th></tr></thead>
+              <tbody id="playersBody"></tbody>
+            </table>
+          </div>
+          <div class="player-detail" id="playerDetail"></div>
+        </section>
+
+        <!-- ИГРА: режим, имена, правила -->
+        <section data-panel="game">
+          <div class="lbl">Режим игры</div>
+          <div class="seg" id="modeSeg" role="group" aria-label="Режим игры">
+            <button data-mode="hotseat" class="on">2 игрока</button>
+            <button data-mode="bot-b">Бот: чёрные</button>
+            <button data-mode="bot-w">Бот: белые</button>
+          </div>
+          <div id="levelWrap" style="display:none;margin-top:8px">
+            <select class="sel" id="levelSel" style="width:100%" aria-label="Сила компьютера">
+              <option value="easy">Лёгкий уровень</option>
+              <option value="medium" selected>Средний уровень</option>
+              <option value="hard">Сильный уровень</option>
+            </select>
+          </div>
+          <div class="hint" id="botHint" style="margin-top:7px">Обе стороны играют на одной доске</div>
+          <div class="version-line" id="versionLine"></div>
+
+          <div class="lbl" style="margin-top:14px">Имена игроков (для архива и статистики)</div>
+          <div class="field"><span class="swatch w"></span><input class="inp" id="nameWhite" placeholder="Без имени — партия станет анонимной" aria-label="Имя игрока за белых"></div>
+          <div class="field"><span class="swatch b"></span><input class="inp" id="nameBlack" placeholder="Без имени — партия станет анонимной" aria-label="Имя игрока за чёрных"></div>
+          <div class="hint">Пустое имя = «Аноним». Все анонимные партии попадают в один сводный профиль, который можно обнулить. Одинаковые имена объединяются: счёт ведётся суммарно.</div>
+
+          <label class="chk"><input type="checkbox" id="chkAutoFlip"> Переворачивать доску после хода (режим «2 игрока»)</label>
+          <label class="chk"><input type="checkbox" id="chkPanelAuto"> Открывать меню при запуске (рекомендуется на компьютере)</label>
+          <label class="chk"><input type="checkbox" id="chkFullStart"> Запускать во весь экран (компьютер)</label>
+
+          <div class="lbl" style="margin-top:14px">Напоминание о выгрузке архива</div>
+          <div class="row" style="gap:8px">
+            <input class="inp inp-sm" id="reminderInput" type="number" min="5" max="1000" step="5" value="30" aria-label="Напоминать о выгрузке каждые N партий">
+            <span class="hint">партий — потом предложить выгрузить PGN-файл</span>
+          </div>
+        </section>
+
+        <!-- ДВИЖОК -->
+        <section data-panel="engine">
+          <div class="lbl">Чем считает компьютер</div>
+          <div class="engine-list" id="engineList"></div>
+          <div class="engine-detail" id="engineDetail"></div>
+
+          <div class="lbl" style="margin-top:14px">Rodent IV</div>
+          <div class="arch-info" id="rodentInfo"></div>
+          <div class="engine-drop" id="rodentDrop">
+            <div class="ed-ic">🧩</div>
+            <div class="ed-txt">
+              Добавьте свою сборку Rodent IV для браузера (WASM/asm.js с UCI-интерфейсом).
+              Файл сохранится локально в этом устройстве — в IndexedDB, отдельно от архива партий.
+            </div>
+            <input type="file" id="rodentFile" accept=".wasm,.js,.zip,application/wasm,application/javascript" aria-label="Файл движка Rodent IV">
+            <div class="hint" id="rodentProgress"></div>
+          </div>
+          <div class="btns3" style="margin-top:8px">
+            <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
+            <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent IV активным движком компьютера">▶ Использовать</button>
+            <button class="btn btn-mini" id="btnRodentTest" data-tip="Запустить движок и проверить, что он отвечает на UCI">🔌 Проверить</button>
+            <button class="btn btn-mini danger" id="btnRodentDel" data-tip="Удалить файл движка из хранилища">🗑 Удалить</button>
+          </div>
+          <details class="quota-help" style="margin-top:10px">
+            <summary>Что нужно, чтобы Rodent IV заработал здесь</summary>
+            <div class="hint" id="rodentHelp"></div>
+          </details>
+        </section>
+
+        <!-- ПОЗИЦИЯ: FEN / PGN -->
+        <section data-panel="position">
+          <div class="lbl">Текущая позиция (FEN)</div>
+          <div class="fen-line">
+            <div class="fen" id="fenText" title="Нажмите, чтобы перенести в поле ввода"></div>
+            <button class="icon-btn" id="btnCopyFen" data-tip="Скопировать FEN">⧉</button>
+            <button class="icon-btn" id="btnLichessFen" data-tip="Скопировать FEN и открыть анализ на Lichess">↗</button>
+          </div>
+          <div class="fen-line" style="margin-top:8px">
+            <input class="fen fen-input" id="fenInput" spellcheck="false" placeholder="Вставьте FEN, чтобы выставить позицию" aria-label="FEN позиции">
+            <button class="btn btn-mini" id="btnLoadFen">Поставить</button>
+          </div>
+
+          <div class="lbl" style="margin-top:14px">Партия в PGN</div>
+          <div class="btns3">
+            <button class="btn btn-mini" id="btnCopyPgn" data-tip="Скопировать PGN текущей партии">⧉ Копировать</button>
+            <button class="btn btn-mini" id="btnDownloadPgn" data-tip="Скачать PGN текущей партии">⬇ Скачать</button>
+            <button class="btn btn-mini" id="btnImportPgn2" data-tip="Импортировать партии из PGN">⬆ Импорт</button>
+          </div>
+          <button class="btn btn-mini wide lichess" id="btnLichessPgn" data-tip="Скопировать PGN в буфер обмена и открыть lichess.org в новой вкладке">
+            ↗ Скопировать и перейти на Lichess
+          </button>
+        </section>
+      </div>
+  </aside>
+</div>
+
+<div class="app">
+  <footer class="foot">
+    Работает без интернета и без установки — один HTML-файл. Партии, архив и статистика хранятся в этом браузере.<br>
+    Фигуры — набор Cburnett (Wikimedia, свободная лицензия CC BY-SA / GFDL).
+    <div class="platform-note" id="platformNote"></div>
+    <div class="foot-version" id="footVersion"></div>
+  </footer>
+</div>
+
+<div id="ghost"></div>
+<div id="live" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+
+<script>
+/*@ENGINE@*/
+</script>
+<script>
+/*@STORE@*/
+</script>
+<script>
+/*@BOT@*/
+</script>
+<script>
+/*@PLATFORM@*/
+</script>
+<script>
+/*@ENGINES@*/
+</script>
+<script>
+/*@APP@*/
+</script>
+</body>
+</html>

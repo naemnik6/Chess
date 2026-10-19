@@ -1,0 +1,75 @@
+# Авто-сборка и публикация релизов Chess.
+# Как пользоваться:
+#   1) поднять версию в version.json и desktop/package.json;
+#   2) закоммитить и повесить тег:  git tag v2.3 && git push origin v2.3
+#   3) workflow сам соберёт веб-часть, установщики и опубликует GitHub-релиз
+#      с файлами и latest.yml — после этого electron-updater в приложении
+#      предложит обновление пользователям («⋮ → Справка → Проверить обновления»).
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:          # ручной запуск из вкладки Actions
+
+permissions:
+  contents: write             # нужно для создания релиза и загрузки ассетов
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Зависимости тестов
+        run: npm install --no-save jsdom
+      - name: Сборка и проверки
+        run: |
+          node build.js
+          node test.js
+          node uitest.js
+          node uitest2.js
+          node uitest3.js
+          node uitest4.js
+          node uitest5.js
+          node uitest6.js
+          node uitest7.js
+          node uitest8.js
+          node uitest9.js
+
+  release-windows:            # основная целевая платформа — Windows
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Веб-часть (index.html, sw.js с версией)
+        run: node build.js
+      - name: Зависимости обёртки
+        working-directory: desktop
+        run: npm install
+      - name: Собрать и опубликовать релиз
+        working-directory: desktop
+        run: npx electron-builder --win --publish always
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-linux:              # второстепенные платформы
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node build.js
+      - working-directory: desktop
+        run: npm install
+      - working-directory: desktop
+        run: npx electron-builder --linux --publish always
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

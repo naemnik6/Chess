@@ -1,0 +1,87 @@
+{
+  "name": "chesster",
+  "productName": "Chess",
+  "version": "2.2.0",
+  "description": "Настольная версия браузерных шахмат: один файл index.html, архив партий, профили, задел под Rodent IV.",
+  "main": "main.js",
+  "author": "Chesster",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icons": "python3 icon.py",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-updater": "^6.2.1"
+  },
+  "build": {
+    "appId": "org.chesster.app",
+    "productName": "Шахматы",
+    "files": [
+      "main.js",
+      "preload.js",
+      "icons/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../index.html",
+        "to": "app/index.html"
+      },
+      {
+        "from": "../sw.js",
+        "to": "app/sw.js"
+      },
+      {
+        "from": "../manifest.webmanifest",
+        "to": "app/manifest.webmanifest"
+      },
+      {
+        "from": "../version.json",
+        "to": "app/version.json"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "icons/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "icons/icon.icns",
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "icons/icon-512.png",
+      "category": "Game"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Шахматы"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "naemnik6",
+      "repo": "Chess",
+      "releaseType": "release"
+    }
+  }
+}

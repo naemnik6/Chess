@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Шахматы",
+  "version": "1.0.0",
+  "identifier": "org.chesster.app",
+  "build": {
+    "beforeBuildCommand": "node ../build.js",
+    "frontendDist": "../../",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Шахматы",
+        "width": 1360,
+        "height": 900,
+        "minWidth": 720,
+        "minHeight": 560,
+        "resizable": true,
+        "backgroundColor": "#0b0e1c"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "capabilities": ["default"]
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "../icons/icon-32.png",
+      "../icons/icon-128.png",
+      "../icons/icon-512.png",
+      "../icons/icon.ico",
+      "../icons/icon.svg"
+    ],
+    "category": "Game",
+    "shortDescription": "Шахматы: игра за обе стороны, архив партий и статистика",
+    "longDescription": "Настольная версия браузерных шахмат: полные правила, архив партий в PGN, профили соперников, место под внешние движки (Rodent IV)."
+  }
+}
