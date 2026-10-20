@@ -68,7 +68,7 @@ setTimeout(() => {
   ok(g1.plies === 7 && g1.moves.length === 7, 'сохранено 7 полуходов');
   ok(/4\. Qxf7# 1-0/.test(g1.pgn), 'PGN партии сохранён: ' + JSON.stringify(g1.pgn.trim().split('\n').pop()));
   ok(G.savedId === g1.id, 'текущая партия помечена как сохранённая');
-  ok(qa('#logAll .log-item').length === 0, 'журнал ещё не отрисован (вкладка не активна)');
+  ok(qa('#logAll .log-item').length === 0, 'журнал ещё не отрисован (окно настроек не открывали)');
 
   console.log('\n— Профили и счёт —');
   tab('players');
@@ -309,7 +309,7 @@ setTimeout(() => {
   ok(G.sans.length === 3 && !G.playback, 'вернулись к живой партии');
 
   console.log('\n— Журнал за всё время и раздельные ключи хранилища —');
-  tab('events');
+  App.openSettings('events');   /* журнал переехал в окно настроек */
   const logs = S.logs();
   ok(logs.length > 10, 'в журнале накопилось записей: ' + logs.length);
   ok(logs.some(l => l.kind === 'mate'), 'в журнале есть запись о мате');

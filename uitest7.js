@@ -152,7 +152,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   console.log('\n— Браузерный режим: задел под WASM-сборку —');
   ok(BP.info().env === 'browser', 'без обёртки среда — браузер');
   ok(BE.nativeAvailable() === false, 'нативный транспорт в браузере недоступен');
-  BA.openPanel('engine');
+  BA.openSettings('engine');   /* вкладка «Движок» переехала в окно настроек */
   ok(b.doc.getElementById('btnRodentExe').disabled === true, 'кнопка «Выбрать exe…» погашена в браузере');
   const data = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]).buffer;   /* магическое число wasm */
   const meta = await BE.install('rodent4', { name: 'rodent4.wasm', size: 8, data });

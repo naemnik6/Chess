@@ -1,6 +1,6 @@
-/* Тесты версии 2.3.1: автообновление (логирование, автопроверка, конкретные
-   ошибки, ручное скачивание), «О программе» в десктопе, стирание стрелок
-   коротким левым кликом по пустой клетке, конфигурация релиза. */
+/* Тесты версии 2.3.1/2.4: автообновление (логирование, автопроверка, конкретные
+   ошибки без простыни заголовков, ручное скачивание), «О программе» в десктопе,
+   стирание стрелок коротким левым кликом по пустой клетке, конфигурация релиза. */
 const fs = require('fs');
 const path = require('path');
 const ROOT = __dirname;
@@ -8,6 +8,8 @@ let JSDOM, VirtualConsole;
 try { ({ JSDOM, VirtualConsole } = require('jsdom')); }
 catch (e) { ({ JSDOM, VirtualConsole } = require('/tmp/node_modules/jsdom')); }
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const V = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).version;   /* напр. 2.4 */
+const PV = V.split('.').length === 2 ? V + '.0' : V;                                      /* установщик: 2.4.0 */
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { c ? (pass++, console.log('  OK   ' + m)) : (fail++, console.log('  FAIL ' + m)); };
@@ -38,7 +40,7 @@ function boot(opts) {
       };
       if (opts.desktop) {
         win.Chesster = {
-          appVersion: '2.3.1', platform: 'electron',
+          appVersion: PV, platform: 'electron',
           openExternal: (url) => { calls.external.push(url); return Promise.resolve(true); },
           saveFile: () => Promise.resolve({ saved: true, path: '/x' }),
           pickEngine: () => Promise.resolve({ canceled: true }),
@@ -51,7 +53,7 @@ function boot(opts) {
           isFullscreen: () => Promise.resolve(false),
           checkUpdates: () => Promise.resolve(updateResult),
           setUpdateResult: (r) => { updateResult = r; },
-          updateInfo: () => Promise.resolve({ version: '2.3.1', state: 'idle' }),
+          updateInfo: () => Promise.resolve({ version: PV, state: 'idle' }),
           onUpdaterEvent: (cb) => { updaterCb = cb; },
           archiveRead: () => fileStore,
           archiveWrite: t => { calls.writes.push(t); fileStore = t; return true; },
@@ -79,27 +81,30 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   const bsq = n => bdoc.querySelector('.sq[data-sq="' + BC.sqFromName(n) + '"]');
   const btap = n => bpev('pointerdown', bsq(n), 0, 0, 0);
 
-  console.log('\n— 2.3.1: «О программе» и журнал (браузер) —');
-  bdoc.querySelector('#btnAppMenu').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
-  bdoc.querySelector('#appMenu [data-am=about]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
+  console.log('\n— 2.4: «О программе» и журнал (браузер, окно настроек) —');
+  BA.openSettings('about');
   await wait(30);
-  let modal = bdoc.querySelector('.modal');
-  ok(modal && modal.querySelector('h2').textContent === 'О программе', 'вкладка «О программе» открывается в браузере');
-  ok(modal && !!modal.querySelector('[data-a=manual]'), 'в «О программе» есть кнопка «Скачать обновление вручную»');
-  modal.querySelector('[data-a=manual]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
+  let modal = null;
+  ok(BA.settingsOpen(), 'категория «О программе» открывается в браузере');
+  ok(!!bdoc.getElementById('btnManualUpdate'), 'в «О программе» есть кнопка «Скачать обновление вручную»');
+  ok(new RegExp('Версия приложения: ' + V.replace('.', '\\.')).test((bdoc.getElementById('versionLine').textContent || '')),
+    'версия ' + V + ' показана в «О программе»');
+  bdoc.getElementById('btnManualUpdate').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
   await wait(30);
   ok(b.calls.opened.includes(RELEASES), 'кнопка открывает страницу релизов GitHub: ' + b.calls.opened.join(','));
-  ok(!bdoc.querySelector('.modal'), 'модальное окно закрылось после перехода');
+  BA.closeSettings();
+  ok(!BA.settingsOpen(), 'настройки закрылись');
 
-  bdoc.querySelector('#btnAppMenu').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
-  bdoc.querySelector('#appMenu [data-am=changelog]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
+  BA.openSettings('help');
   await wait(30);
   ok(BA.CHANGELOG.some(r => r[0] === '2.3.1'), 'в журнале есть запись версии 2.3.1');
+  ok(BA.CHANGELOG.some(r => r[0] === V), 'в журнале есть запись текущей версии ' + V);
   const planRow = BA.CHANGELOG.find(r => r[0] === 'план');
   ok(planRow && !/автообновления через GitHub Actions/i.test(planRow[1]), 'из «плана» убран пункт про автообновления (реализовано)');
-  bdoc.querySelector('.modal [data-a=close]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
+  ok(/окно настроек/i.test((BA.CHANGELOG.find(r => r[0] === V) || ['',''])[1]), 'запись ' + V + ' описывает окно настроек');
+  BA.closeSettings();
 
-  console.log('\n— 2.3.1: короткий левый клик стирает стрелки (браузер) —');
+  console.log('\n— 2.3.1/2.4: короткий левый клик стирает стрелки (браузер) —');
   bpev('pointerdown', bsq('e2'), 450, 650, 2); bpev('pointermove', B, 450, 550, 2); bpev('pointerup', B, 450, 450, 2);
   ok(BA.G.marks.length === 1, 'стрелка e2→e4 нарисована');
   bpev('pointerdown', bsq('e5'), 450, 450, 0); bpev('pointerup', B, 450, 450, 0);
@@ -129,9 +134,9 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   bdoc.dispatchEvent(new B.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
   await wait(20);
 
-  console.log('\n— 2.3.1: проверка обновлений в браузере —');
-  bdoc.querySelector('#btnAppMenu').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
-  bdoc.querySelector('#appMenu [data-am=updates]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
+  console.log('\n— 2.4: проверка обновлений в браузере —');
+  BA.openSettings('about');
+  bdoc.getElementById('btnCheckUpdates').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
   await wait(30);
   modal = bdoc.querySelector('.modal');
   ok(modal && modal.querySelector('h2').textContent === 'Обновления', 'браузер: модалка «Обновления»');
@@ -140,7 +145,7 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   ok(b.errors.length === 0, 'браузер: без ошибок — ' + b.errors.join(' | '));
 
   /* ================= 2. ДЕСКТОП: ошибки, диагностика, события ================= */
-  console.log('\n— 2.3.1: автообновление (десктоп) —');
+  console.log('\n— 2.4: автообновление (десктоп) —');
   const d = boot({
     desktop: true,
     updateResult: {
@@ -157,19 +162,16 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   const D = d.win, DA = D.ChessApp, ddoc = d.doc;
 
   /* «О программе» в десктопе (безлимитный архив: pct = null — раньше падало) */
-  ddoc.querySelector('#btnAppMenu').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
-  ddoc.querySelector('#appMenu [data-am=about]').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
+  DA.openSettings('about');
   await wait(30);
-  modal = ddoc.querySelector('.modal');
-  ok(modal && modal.querySelector('h2').textContent === 'О программе', 'десктоп: «О программе» открывается (регресс quotaInfo.pct = null)');
-  ok(modal && /без ограничений/.test(modal.textContent), 'десктоп: строка архива «без ограничений»');
-  ok(modal && /2\.3\.1/.test(modal.textContent), 'десктоп: версия 2.3.1 в окне');
-  modal.querySelector('[data-a=close]').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
-  await wait(20);
+  const aboutTxt = (ddoc.getElementById('aboutInfo').textContent || '') + ' ' + (ddoc.getElementById('versionLine').textContent || '');
+  ok(/без ограничений/.test(aboutTxt), 'десктоп: строка архива «без ограничений» (регресс quotaInfo.pct = null)');
+  ok(aboutTxt.indexOf(V) >= 0, 'десктоп: версия ' + V + ' в «О программе»');
+  ok(/обёртка/.test(aboutTxt), 'десктоп: показана версия обёртки');
+  await wait(10);
 
   /* конкретная ошибка вместо «не настроено» + кнопка ручного скачивания */
-  ddoc.querySelector('#btnAppMenu').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
-  ddoc.querySelector('#appMenu [data-am=updates]').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
+  ddoc.getElementById('btnCheckUpdates').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
   await wait(60);
   modal = ddoc.querySelector('.modal');
   ok(modal && /не удалось/i.test(modal.querySelector('h2').textContent), 'десктоп: заголовок «Проверить обновления не удалось»');
@@ -180,11 +182,30 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   await wait(30);
   ok(d.calls.external.includes(RELEASES), 'десктоп: кнопка открыла ' + RELEASES + ' через openExternal');
 
-  /* успешный результат: последняя версия — тост, без модалки */
-  d.win.Chesster.setUpdateResult({ ok: true, reason: 'up-to-date', message: 'У вас последняя версия (2.3.1).' });
-  ddoc.querySelector('#btnAppMenu').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
-  ddoc.querySelector('#appMenu [data-am=updates]').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
+  /* 2.4: ошибка 404 с дампом заголовков — короткое сообщение + «Технические подробности» */
+  d.win.Chesster.setUpdateResult({
+    ok: false, reason: 'error',
+    message: 'Проверка обновлений не удалась: 404 "method: GET url: https://github.com/naemnik6/Chess/releases.atom\n\nPlease double check that your authentication token is correct.\n\nHeaders: {"set-cookie":["_gh_sess=SECRET; path=/; secure","logged_in=no"]}"',
+    error: 'HttpError: 404\n  at ...',
+    diag: { packaged: true, updaterLoaded: true, appUpdateYmlExists: true },
+    releasesUrl: RELEASES
+  });
+  ddoc.getElementById('btnCheckUpdates').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
   await wait(60);
+  modal = ddoc.querySelector('.modal');
+  const msgP = modal ? (modal.querySelector('p').textContent || '') : '';
+  ok(modal && /releases\.atom/.test(msgP), '404: в сообщении видна суть — адрес фида релизов');
+  ok(modal && !/Headers:/.test(msgP) && !/set-cookie/.test(msgP), '404: простыни HTTP-заголовков и кук в основном тексте нет');
+  ok(modal && !!modal.querySelector('details.upd-tech'), '404: полный текст спрятан в «Технические подробности»');
+  ok(modal && /set-cookie/.test(modal.querySelector('details.upd-tech').textContent), '404: подробности сохраняют исходный дамп для диагностики');
+  modal.querySelector('[data-a=close]').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+
+  /* успешный результат: последняя версия — тост, без модалки */
+  d.win.Chesster.setUpdateResult({ ok: true, reason: 'up-to-date', message: 'У вас последняя версия (' + PV + ').' });
+  ddoc.getElementById('btnCheckUpdates').dispatchEvent(new D.MouseEvent('click', { bubbles: true }));
+  await wait(60);
+  DA.closeSettings();
   ok(!ddoc.querySelector('.modal'), 'десктоп: при последней версии — только тост, окна нет');
   ok(/ОБНОВЛЕНИЙ НЕТ/.test(ddoc.querySelector('#toastWrap').textContent) &&
     /последняя версия/.test(ddoc.querySelector('#toastWrap').textContent), 'десктоп: тост «Обновлений нет» с текстом результата');
@@ -203,12 +224,12 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   ok(d.errors.length === 0, 'десктоп: без ошибок — ' + d.errors.join(' | '));
 
   /* ================= 3. СТАТИКА: конфигурация релиза ================= */
-  console.log('\n— 2.3.1: конфигурация автообновления и релиза —');
+  console.log('\n— 2.4: конфигурация автообновления и релиза —');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8'));
   ok(pkg.dependencies && /electron-updater/.test(JSON.stringify(pkg.dependencies)),
     'package.json: electron-updater в dependencies (иначе не попадёт в сборку — корень бага «не настроено»)');
   ok(!pkg.devDependencies || !pkg.devDependencies['electron-updater'], 'package.json: в devDependencies electron-updater больше нет');
-  ok(pkg.version === '2.3.1', 'package.json: версия 2.3.1');
+  ok(pkg.version === PV, 'package.json: версия ' + PV);
   ok(pkg.build.publish && pkg.build.publish.provider === 'github' &&
     pkg.build.publish.owner === 'naemnik6' && pkg.build.publish.repo === 'Chess',
     'package.json: build.publish → github naemnik6/Chess (из него electron-builder генерирует app-update.yml)');
@@ -229,13 +250,16 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   ok(/app:checkUpdates/.test(preload) && /app:updateInfo/.test(preload), 'preload.js: checkUpdates + updateInfo');
 
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
-  ok(/v2\.3\.1/.test(bat) && /Обновление до версии 2\.3\.1/.test(bat), 'push-release.bat: тег и коммит v2.3.1');
+  ok(bat.indexOf('git tag v' + PV) >= 0 && bat.indexOf('git push origin v' + PV) >= 0, 'push-release.bat: тег v' + PV);
+  ok(/git commit -m "Release /.test(bat), 'push-release.bat: сообщение коммита на английском (Release …)');
+  ok(!/[^\x09\x0a\x0d\x20-\x7e]/.test(bat), 'push-release.bat: только ASCII — cmd.exe не исказит текст при пуше в GitHub');
   const ver = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8'));
-  ok(ver.version === '2.3.1', 'version.json: 2.3.1');
-  ok(/2\.3\.1/.test(html) && /chesster-2\.3\.1/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')),
-    'index.html и sw.js собраны с версией 2.3.1');
+  ok(ver.version === V, 'version.json: ' + V);
+  ok(html.indexOf("var APP_VERSION = '" + V + "'") >= 0 &&
+    fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8').indexOf('chesster-' + V) >= 0,
+    'index.html и sw.js собраны с версией ' + V);
 
   console.log('\n============================');
-  console.log('2.3.1: пройдено ' + pass + ', провалено ' + fail);
+  console.log(V + ': пройдено ' + pass + ', провалено ' + fail);
   process.exit(fail ? 1 : 0);
 })();

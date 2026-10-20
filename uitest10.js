@@ -94,8 +94,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     'перевес вынесен отдельной строкой: ' + capB.querySelector('.adv').textContent);
   const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
   ok(/\.btn\.wide\{width:100%;grid-column:1 \/ -1\}/.test(css), '«Отмена» в диалоге превращения занимает всю ширину по центру');
-  ok(/\.tab-body \[data-tip\]:hover::after[^{]*\{top:auto;bottom:calc\(100% \+ 9px\)/.test(css),
-    'подсказки внутри панели рисуются вверх — полосы прокрутки не появляются');
+  ok(css.indexOf('[data-tip]:hover::after') < 0 && /\.js-tip\{position:fixed;z-index:600/.test(css),
+    'подсказки — один фиксированный элемент #tip поверх всего: ползунки в панели невозможны (2.4)');
   ok(bdoc.querySelector('.logo .sub') === null, 'подзаголовок под логотипом убран');
   BA.openPanel('archive');
   const chkU = bdoc.getElementById('chkUnlimited');
@@ -109,14 +109,14 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   chkU.checked = false; chkU.dispatchEvent(new B.Event('change', { bubbles: true }));
   ok(BS.isUnlimited() === false, 'лимит включается обратно');
 
-  console.log('\n— Журнал изменений в меню —');
-  BA.toggleAppMenu(true);
-  bdoc.querySelector('#appMenu [data-am=changelog]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
-  const clTxt = (bdoc.querySelector('.modal .rules-body').textContent || '').replace(/\s+/g, ' ');
-  ok(/Версия 1\.0/.test(clTxt) && /Версия 2\.3/.test(clTxt), 'журнал охватывает версии с 1.0 по 2.3');
-  ok(BA.CHANGELOG.length >= 9, 'записей в журнале: ' + BA.CHANGELOG.length);
+  console.log('\n— Журнал изменений в настройках (2.4) —');
+  BA.openSettings('help');
+  const clTxt = (bdoc.querySelector('#helpChangelog').textContent || '').replace(/\s+/g, ' ');
+  ok(/Версия 1\.0/.test(clTxt) && /Версия 2\.3/.test(clTxt), 'журнал охватывает версии с 1.0 по 2.3+');
+  ok(BA.CHANGELOG.length >= 10, 'записей в журнале: ' + BA.CHANGELOG.length);
   ok(/стрелки/i.test(clTxt) && /архив/i.test(clTxt), 'записи журнала содержательные');
-  bdoc.querySelector('.modal [data-a=close]').dispatchEvent(new B.MouseEvent('click', { bubbles: true }));
+  ok(bdoc.querySelector('#helpChangelog').closest('#setWin') !== null, 'журнал изменений показывается внутри окна настроек');
+  BA.closeSettings();
   ok(b.errors.length === 0, 'ошибок консоли в браузере нет');
 
   /* ================= ДЕСКТОП: архив файлом ================= */
@@ -164,10 +164,12 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/node build\.js\n\s+node test\.js/.test(yml), 'в контуре CI сборка и тесты правил');
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8'));
-  const PV = pkg.version;                                  /* версия установщика, напр. 2.3.1 */
+  const PV = pkg.version;                                  /* версия установщика, напр. 2.4.0 */
   const VJ = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).version;
-  ok(/git add \./.test(bat) && bat.indexOf('git commit -m "Обновление до версии ' + PV + '"') >= 0,
-    'bat делает коммит с номером версии ' + PV);
+  ok(/git add \./.test(bat) && /git commit -m "Release /.test(bat),
+    'bat делает коммит; текст коммита на английском');
+  ok(!/[^\x09\x0a\x0d\x20-\x7e]/.test(bat),
+    'в bat только ASCII: cmd.exe не искажает текст, в GitHub он остаётся читаемым');
   ok(bat.indexOf('git tag v' + PV + ' && git push origin v' + PV) >= 0, 'bat ставит и пушит тег v' + PV);
   ok(PV === (VJ.split('.').length === 2 ? VJ + '.0' : VJ), 'версия обёртки ' + PV + ' синхронна с version.json ' + VJ);
   ok(!pkg.build.linux && !pkg.build.mac, 'конфигурации linux и mac из сборки убраны');

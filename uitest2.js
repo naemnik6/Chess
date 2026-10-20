@@ -56,7 +56,7 @@ const setAutoFlip = on => {
   c.checked = on;
   c.dispatchEvent(new win.Event('change', { bubbles: true }));
 };
-const logText = () => { App.switchTab('events'); return txt('logAll'); };
+const logText = () => { App.openSettings('events'); const t = txt('logAll'); App.closeSettings(); return t; };
 const modalYes = () => { const b = doc.querySelector('.modal [data-a=yes]'); if (b) b.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); };
 
 setTimeout(() => {

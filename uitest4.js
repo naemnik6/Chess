@@ -57,7 +57,7 @@ const tb = act => {
   b.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
 };
 const marksBtn = () => doc.querySelector('#toolbar button[data-act="marks"]');
-const logText = () => { App.switchTab('events'); return txt('logAll'); };
+const logText = () => { App.openSettings('events'); const t = txt('logAll'); App.closeSettings(); return t; };
 const modal = a => { const b = doc.querySelector('.modal [data-a=' + a + ']'); if (b) b.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); };
 
 setTimeout(() => {

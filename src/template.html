@@ -30,7 +30,7 @@
       <span class="head-status" id="headStatus" title="Текущее состояние партии">Ход белых</span>
     </div>
     <div class="top-right">
-      <button class="icon-btn icon-btn-lg" id="btnPanel" data-tip="Меню: ходы, журнал, архив, профили, настройки, позиция" aria-label="Открыть меню" aria-expanded="false">☰</button>
+      <button class="icon-btn icon-btn-lg" id="btnPanel" data-tip="Боковое меню: ходы, архив, профили, игра, позиция" aria-label="Открыть меню" aria-expanded="false">☰</button>
       <!-- звук: нажимаешь кнопку — видишь шкалу -->
       <div class="pop-wrap" id="soundPop">
         <button class="icon-btn on" id="btnSound" data-tip="Звук: нажмите, чтобы настроить" aria-label="Звук" aria-expanded="false">🔊</button>
@@ -44,41 +44,9 @@
           <div class="pop-hint">Отдельные сигналы: ход, взятие, рокировка, превращение, шах, итог партии.</div>
         </div>
       </div>
-      <button class="icon-btn" id="btnHelp" data-tip="Правила, объявления и горячие клавиши" aria-label="Справка">?</button>
-      <!-- меню приложения: заменило нативную панель Партия/Вид/Инструменты/Справка -->
-      <div class="pop-wrap" id="appMenuPop">
-        <button class="icon-btn" id="btnAppMenu" data-tip="Меню приложения: партия, вид, инструменты, справка" aria-label="Меню приложения" aria-expanded="false">⋮</button>
-        <div class="pop pop-wide" id="appMenu" role="menu">
-          <div class="pop-title">Партия</div>
-          <div class="am-grid">
-            <button data-am="new" role="menuitem">Новая партия <span class="am-k">N</span></button>
-            <button data-am="undo" role="menuitem">Вернуть ход <span class="am-k">Z</span></button>
-            <button data-am="save" role="menuitem">Сохранить в архив</button>
-            <button data-am="offload" role="menuitem">Выгрузить архив…</button>
-          </div>
-          <div class="pop-title">Вид</div>
-          <div class="am-grid">
-            <button data-am="fullscreen" role="menuitem">Полный экран <span class="am-k">F11</span></button>
-            <button data-am="flip" role="menuitem">Перевернуть доску <span class="am-k">F</span></button>
-            <button data-am="panel" role="menuitem">Меню-панель <span class="am-k">M</span></button>
-            <button data-am="autoflip" role="menuitem">Автоповорот доски</button>
-          </div>
-          <div class="pop-title">Инструменты</div>
-          <div class="am-grid">
-            <button data-am="marks" role="menuitem">Стереть стрелки</button>
-            <button data-am="fen" role="menuitem">Копировать FEN</button>
-            <button data-am="pgn" role="menuitem">Копировать PGN</button>
-            <button data-am="lichess" role="menuitem">Открыть в Lichess</button>
-          </div>
-          <div class="pop-title">Справка</div>
-          <div class="am-grid">
-            <button data-am="help" role="menuitem">Правила и объявления</button>
-            <button data-am="changelog" role="menuitem">История изменений</button>
-            <button data-am="updates" role="menuitem">Проверить обновления</button>
-            <button data-am="about" role="menuitem">О программе</button>
-          </div>
-        </div>
-      </div>
+      <!-- окно настроек: заменило меню приложения «⋮» и кнопку справки «?» —
+           вся справка, вид, движок, журнал и технические пункты собраны там -->
+      <button class="icon-btn" id="btnSettings" data-tip="Настройки: вид, архив, движок, журнал, справка, о программе" aria-label="Настройки" aria-expanded="false">⚙</button>
     </div>
   </header>
 
@@ -119,11 +87,9 @@
       </div>
       <div class="tabs" id="tabs" role="tablist">
         <button data-tab="moves"    class="on" role="tab">Ходы</button>
-        <button data-tab="events"   role="tab">Журнал<span class="badge" id="evBadge" hidden>0</span></button>
         <button data-tab="archive"  role="tab">Архив<span class="badge" id="arBadge" hidden>0</span></button>
         <button data-tab="players"  role="tab">Профили</button>
         <button data-tab="game"     role="tab">Игра</button>
-        <button data-tab="engine"   role="tab">Движок</button>
         <button data-tab="position" role="tab">Позиция</button>
       </div>
 
@@ -161,15 +127,6 @@
           </div>
         </section>
 
-        <!-- ЖУРНАЛ СОБЫТИЙ ЗА ВСЁ ВРЕМЯ -->
-        <section data-panel="events">
-          <div class="row between" style="margin-bottom:8px">
-            <span class="hint" id="logCount">Записей: 0</span>
-            <button class="btn btn-mini" id="btnClearLog">Очистить журнал</button>
-          </div>
-          <div class="log log-all" id="logAll"></div>
-        </section>
-
         <!-- АРХИВ ПАРТИЙ -->
         <section data-panel="archive">
           <div class="row" style="margin-bottom:8px;gap:6px">
@@ -197,15 +154,12 @@
             <button class="btn btn-mini" id="btnImportPgn" data-tip="Импортировать партии из PGN">⬆ Импорт</button>
             <button class="btn btn-mini" id="btnExportAll" data-tip="Скачать все партии одним PGN-файлом">⬇ Экспорт</button>
           </div>
-          <button class="btn btn-mini wide offload" id="btnOffload" data-tip="Скачать все партии и удалить их из браузера (статистика профилей останется)">
-            📦 Выгрузить всё и очистить архив
-          </button>
+          <div class="hint" style="margin-top:7px">Выгрузка всего архива с очисткой — в окне настроек (⚙), категория «Архив».</div>
           <div class="arch-list" id="archList"></div>
         </section>
 
         <!-- ПРОФИЛИ СОПЕРНИКОВ -->
         <section data-panel="players">
-          <label class="chk"><input type="checkbox" id="chkCountAnon"> Учитывать партии без имени (анонимные) в статистике</label>
           <div class="row between" style="margin:8px 0">
             <span class="hint" id="playersCount">Профилей: 0</span>
             <button class="btn btn-mini" id="btnClearAnon" data-tip="Обнулить сводный профиль «Аноним»">Очистить анонима</button>
@@ -235,51 +189,13 @@
             </select>
           </div>
           <div class="hint" id="botHint" style="margin-top:7px">Обе стороны играют на одной доске</div>
-          <div class="version-line" id="versionLine"></div>
 
           <div class="lbl" style="margin-top:14px">Имена игроков (для архива и статистики)</div>
           <div class="field"><span class="swatch w"></span><input class="inp" id="nameWhite" placeholder="Без имени — партия станет анонимной" aria-label="Имя игрока за белых"></div>
           <div class="field"><span class="swatch b"></span><input class="inp" id="nameBlack" placeholder="Без имени — партия станет анонимной" aria-label="Имя игрока за чёрных"></div>
           <div class="hint">Пустое имя = «Аноним». Все анонимные партии попадают в один сводный профиль, который можно обнулить. Одинаковые имена объединяются: счёт ведётся суммарно.</div>
 
-          <label class="chk"><input type="checkbox" id="chkAutoFlip"> Переворачивать доску после хода (режим «2 игрока»)</label>
-          <label class="chk"><input type="checkbox" id="chkPanelAuto"> Открывать меню при запуске (рекомендуется на компьютере)</label>
-          <label class="chk"><input type="checkbox" id="chkFullStart"> Запускать во весь экран (компьютер)</label>
-
-          <div class="lbl" style="margin-top:14px">Напоминание о выгрузке архива</div>
-          <div class="row" style="gap:8px">
-            <input class="inp inp-sm" id="reminderInput" type="number" min="5" max="1000" step="5" value="30" aria-label="Напоминать о выгрузке каждые N партий">
-            <span class="hint">партий — потом предложить выгрузить PGN-файл</span>
-          </div>
-        </section>
-
-        <!-- ДВИЖОК -->
-        <section data-panel="engine">
-          <div class="lbl">Чем считает компьютер</div>
-          <div class="engine-list" id="engineList"></div>
-          <div class="engine-detail" id="engineDetail"></div>
-
-          <div class="lbl" style="margin-top:14px">Rodent IV</div>
-          <div class="arch-info" id="rodentInfo"></div>
-          <div class="engine-drop" id="rodentDrop">
-            <div class="ed-ic">🧩</div>
-            <div class="ed-txt">
-              Добавьте свою сборку Rodent IV для браузера (WASM/asm.js с UCI-интерфейсом).
-              Файл сохранится локально в этом устройстве — в IndexedDB, отдельно от архива партий.
-            </div>
-            <input type="file" id="rodentFile" accept=".wasm,.js,.zip,application/wasm,application/javascript" aria-label="Файл движка Rodent IV">
-            <div class="hint" id="rodentProgress"></div>
-          </div>
-          <div class="btns3" style="margin-top:8px">
-            <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
-            <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent IV активным движком компьютера">▶ Использовать</button>
-            <button class="btn btn-mini" id="btnRodentTest" data-tip="Запустить движок и проверить, что он отвечает на UCI">🔌 Проверить</button>
-            <button class="btn btn-mini danger" id="btnRodentDel" data-tip="Удалить файл движка из хранилища">🗑 Удалить</button>
-          </div>
-          <details class="quota-help" style="margin-top:10px">
-            <summary>Что нужно, чтобы Rodent IV заработал здесь</summary>
-            <div class="hint" id="rodentHelp"></div>
-          </details>
+          <div class="hint" style="margin-top:10px">Автоповорот доски, запуск, напоминание о выгрузке архива — в окне настроек (⚙).</div>
         </section>
 
         <!-- ПОЗИЦИЯ: FEN / PGN -->
@@ -307,6 +223,116 @@
         </section>
       </div>
   </aside>
+</div>
+
+<!-- ======= ОКНО НАСТРОЕК (⚙) =======
+     Заменило меню приложения «⋮»: технические пункты, справка, журнал,
+     движок и архивные настройки собраны здесь, с категориями слева.
+     Секции живут в DOM постоянно — элементы не пересоздаются при открытии. -->
+<div class="set-bg" id="setBg"></div>
+<div class="set-win" id="setWin" role="dialog" aria-modal="true" aria-label="Настройки" aria-hidden="true">
+  <div class="set-head">
+    <span class="set-ic" aria-hidden="true">⚙</span>
+    <span class="set-title">Настройки</span>
+    <span class="hint set-head-hint">Категории слева: нажмите, чтобы перейти, или просто листайте</span>
+    <button class="icon-btn" id="btnSetClose" data-tip="Закрыть настройки (Esc)" aria-label="Закрыть настройки">✕</button>
+  </div>
+  <div class="set-body">
+    <nav class="set-nav" id="setNav" aria-label="Категории настроек">
+      <button data-sc="view" class="on">🎨 Вид</button>
+      <button data-sc="archive">🗂 Архив</button>
+      <button data-sc="engine">🧩 Движок</button>
+      <button data-sc="events">📜 Журнал</button>
+      <button data-sc="help">❓ Справка</button>
+      <button data-sc="about">ℹ️ О программе</button>
+    </nav>
+    <div class="set-scroll" id="setScroll">
+
+      <section data-set="view">
+        <h3 class="set-h">Вид</h3>
+        <div class="set-actions">
+          <button class="btn btn-mini" id="btnSetFullscreen" data-tip="Переключить полноэкранный режим и оконный (F11)">🖥 Полный экран</button>
+          <button class="btn btn-mini" id="btnSetPanel" data-tip="Открыть или закрыть боковое меню с вкладками игры (M)">☰ Меню-панель</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="chkAutoFlip"> Переворачивать доску после хода (режим «2 игрока»)</label>
+        <label class="chk"><input type="checkbox" id="chkPanelAuto"> Открывать меню при запуске (рекомендуется на компьютере)</label>
+        <label class="chk"><input type="checkbox" id="chkFullStart"> Запускать во весь экран (компьютер)</label>
+        <div class="hint">Ручной переворот доски остался во вкладке «Ходы»: кнопка ⇅ или клавиша F.</div>
+      </section>
+
+      <section data-set="archive">
+        <h3 class="set-h">Архив</h3>
+        <div class="arch-info" id="setArchInfo"></div>
+        <label class="chk"><input type="checkbox" id="chkCountAnon"> Учитывать партии без имени (анонимные) в статистике</label>
+        <div class="hint">Кнопка «Очистить анонима» — во вкладке «Профили», рядом с таблицей игроков.</div>
+        <div class="lbl" style="margin-top:12px">Напоминание о выгрузке</div>
+        <label class="chk"><input type="checkbox" id="chkReminder"> Напоминать выгружать архив в PGN-файл</label>
+        <div class="row" style="gap:8px">
+          <input class="inp inp-sm" id="reminderInput" type="number" min="5" max="1000" step="5" value="30" aria-label="Напоминать о выгрузке каждые N партий">
+          <span class="hint">партий — потом предложить скачать файл и очистить архив</span>
+        </div>
+        <button class="btn btn-mini wide offload" id="btnOffload" data-tip="Скачать все партии одним PGN-файлом и удалить их из хранилища (статистика профилей останется)">
+          📦 Выгрузить всё и очистить архив
+        </button>
+      </section>
+
+      <section data-set="engine">
+        <h3 class="set-h">Движок</h3>
+        <div class="lbl">Чем считает компьютер</div>
+        <div class="engine-list" id="engineList"></div>
+        <div class="engine-detail" id="engineDetail"></div>
+
+        <div class="lbl" style="margin-top:14px">Rodent IV</div>
+        <div class="arch-info" id="rodentInfo"></div>
+        <div class="engine-drop" id="rodentDrop">
+          <div class="ed-ic">🧩</div>
+          <div class="ed-txt">
+            Добавьте свою сборку Rodent IV для браузера (WASM/asm.js с UCI-интерфейсом).
+            Файл сохранится локально в этом устройстве — в IndexedDB, отдельно от архива партий.
+          </div>
+          <input type="file" id="rodentFile" accept=".wasm,.js,.zip,application/wasm,application/javascript" aria-label="Файл движка Rodent IV">
+          <div class="hint" id="rodentProgress"></div>
+        </div>
+        <div class="btns3" style="margin-top:8px">
+          <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
+          <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent IV активным движком компьютера">▶ Использовать</button>
+          <button class="btn btn-mini" id="btnRodentTest" data-tip="Запустить движок и проверить, что он отвечает на UCI">🔌 Проверить</button>
+          <button class="btn btn-mini danger" id="btnRodentDel" data-tip="Удалить файл движка из хранилища">🗑 Удалить</button>
+        </div>
+        <details class="quota-help" style="margin-top:10px">
+          <summary>Что нужно, чтобы Rodent IV заработал здесь</summary>
+          <div class="hint" id="rodentHelp"></div>
+        </details>
+      </section>
+
+      <section data-set="events">
+        <h3 class="set-h">Журнал</h3>
+        <div class="row between" style="margin-bottom:8px">
+          <span class="hint" id="logCount">Записей: 0</span>
+          <button class="btn btn-mini" id="btnClearLog">Очистить журнал</button>
+        </div>
+        <div class="log log-all" id="logAll"></div>
+      </section>
+
+      <section data-set="help">
+        <h3 class="set-h">Справка</h3>
+        <div class="rules-body set-rules" id="helpRules"></div>
+        <h3 class="set-h set-h2">История изменений</h3>
+        <div class="rules-body set-rules" id="helpChangelog"></div>
+      </section>
+
+      <section data-set="about">
+        <h3 class="set-h">О программе</h3>
+        <div class="version-line" id="versionLine"></div>
+        <div class="arch-info" id="aboutInfo"></div>
+        <div class="btns" style="margin-top:10px">
+          <button class="btn" id="btnCheckUpdates" data-tip="В версии для компьютера — проверить новый релиз на GitHub; браузер и PWA обновляются сами">⟳ Проверить обновления</button>
+          <button class="btn" id="btnManualUpdate" data-tip="Открыть страницу релизов GitHub в системном браузере">⬇ Скачать обновление вручную</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
 </div>
 
 <div class="app">

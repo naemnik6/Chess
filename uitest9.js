@@ -1,4 +1,4 @@
-/* Тесты версии 2.1: материал с превращениями, разгрузка зоны под доской, меню приложения, полный экран */
+/* Тесты версии 2.1/2.4: материал с превращениями, разгрузка зоны под доской, окно настроек, полный экран */
 const fs = require('fs');
 const path = require('path');
 let JSDOM, VirtualConsole;
@@ -52,7 +52,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const click = id => doc.getElementById(id).dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   const tap = n => doc.querySelector('.sq[data-sq="' + C.sqFromName(n) + '"]').dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, button: 0 }));
   const move = u => { tap(u.slice(0, 2)); tap(u.slice(2, 4)); };
-  const am = a => { App.toggleAppMenu(true); doc.querySelector('#appMenu [data-am=' + a + ']').dispatchEvent(new win.MouseEvent('click', { bubbles: true })); };
+  const tbAct = a => doc.querySelector('#toolbar button[data-act=' + a + ']').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   const adv = side => {
     const el = doc.getElementById(side === 'w' ? 'capBottom' : 'capTop');
     const a = el.querySelector('.adv');
@@ -64,8 +64,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(App.version().app === V, 'приложение отражает версию ' + V + ': ' + App.version().app);
   const PV = V.split('.').length === 2 ? V + '.0' : V;   /* «2.3» ↔ «2.3.0», «2.3.1» ↔ «2.3.1» */
   ok(JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8')).version === PV, 'обёртка синхронна: ' + PV);
-  App.openPanel('game');
-  ok(new RegExp('Версия приложения: ' + V.replace('.', '\\.')).test(txt('versionLine')), 'версия видна на вкладке «Игра»: ' + txt('versionLine').slice(0, 40));
+  App.openSettings('about');
+  ok(new RegExp('Версия приложения: ' + V.replace('.', '\\.')).test(txt('versionLine')), 'версия видна в настройках («О программе»): ' + txt('versionLine').slice(0, 40));
+  App.closeSettings();
 
   console.log('\n— Полный экран и отсутствие нативной панели меню —');
   ok(calls.fullscreen.indexOf(true) >= 0, 'при запуске на компьютере окно переведено в полный экран');
@@ -75,35 +76,51 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/win:setFullscreen/.test(main) && /win:isFullscreen/.test(main), 'полный экран управляется через IPC');
   const pre = fs.readFileSync(path.join(ROOT, 'desktop', 'preload.js'), 'utf8');
   ok(/setFullscreen/.test(pre) && /checkUpdates/.test(pre), 'preload отдаёт странице полный экран и проверку обновлений');
-  ok(/data-am="fullscreen"/.test(html), 'пункт «Полный экран» есть в меню приложения');
-  App.toggleAppMenu(true);
-  doc.querySelector('#appMenu [data-am=fullscreen]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  ok(/id="btnSetFullscreen"/.test(html), 'кнопка «Полный экран» есть в настройках (категория «Вид»)');
+  App.openSettings('view');
+  doc.getElementById('btnSetFullscreen').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await wait(30);
-  ok(calls.fullscreen.length >= 2, 'пункт меню переключает полный экран через обёртку');
+  ok(calls.fullscreen.length >= 2, 'кнопка настроек переключает полный экран через обёртку');
+  App.closeSettings();
   App.closePanel();
 
-  console.log('\n— Меню приложения (⋮) вместо нативной панели —');
-  ok(doc.getElementById('btnAppMenu') !== null, 'в шапке есть кнопка меню приложения рядом со звуком и справкой');
-  ok(doc.getElementById('btnAppMenu').closest('.top-right') !== null, 'кнопка расположена в правой группе шапки');
-  App.toggleAppMenu(true);
-  ok(App.appMenuOpen(), 'меню открывается');
-  const groups = [...doc.querySelectorAll('#appMenu .pop-title')].map(e => e.textContent);
-  ok(groups.join(',') === 'Партия,Вид,Инструменты,Справка', 'группы меню повторяют бывшую нативную панель: ' + groups.join(' / '));
-  ok(doc.querySelectorAll('#appMenu button[data-am]').length === 16, 'в меню 16 действий, включая историю изменений');
-  doc.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
-  ok(!App.appMenuOpen(), 'клик мимо закрывает меню');
-  am('flip');
-  ok(G.flipped === true, 'действие «Перевернуть доску» работает из меню приложения');
-  am('flip');
-  am('help');
-  ok(!!doc.querySelector('.modal .rules-body'), '«Правила и объявления» открываются из меню');
-  doc.querySelector('.modal [data-a=close]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  am('about');
-  ok(new RegExp('версия ' + V.replace('.', '\\.')).test((doc.querySelector('.modal p').textContent || '')), '«О программе» показывает версию и данные хранилища');
-  doc.querySelector('.modal [data-a=updates]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  console.log('\n— Окно настроек (⚙) вместо меню приложения (2.4) —');
+  ok(doc.getElementById('btnSettings') !== null, 'в шапке есть кнопка настроек рядом со звуком');
+  ok(doc.getElementById('btnSettings').closest('.top-right') !== null, 'кнопка расположена в правой группе шапки');
+  ok(doc.getElementById('btnAppMenu') === null && doc.getElementById('btnHelp') === null,
+    'меню «⋮» и кнопка «?» убраны — их заменило окно настроек');
+  doc.getElementById('btnSettings').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  ok(App.settingsOpen(), 'настройки открываются кликом по ⚙');
+  const cats = [...doc.querySelectorAll('#setNav button')].map(b => b.dataset.sc);
+  ok(cats.join(',') === 'view,archive,engine,events,help,about', 'шесть категорий: ' + cats.join(' / '));
+  ok([...doc.querySelectorAll('#setScroll section[data-set]')].map(x => x.dataset.set).join(',') === cats.join(','),
+    'каждой категории соответствует раздел окна');
+  ok(['btnSetFullscreen', 'btnSetPanel', 'btnOffload', 'btnCheckUpdates', 'btnManualUpdate', 'btnClearLog', 'logAll', 'engineList']
+    .every(id => doc.getElementById(id).closest('#setWin') !== null),
+    'технические пункты собраны внутри окна настроек');
+  doc.getElementById('setBg').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  ok(!App.settingsOpen(), 'клик по затемнению закрывает настройки');
+  /* переворот доски остался во вкладке «Ходы» */
+  App.openPanel('moves');
+  tbAct('flip');
+  ok(G.flipped === true, '«Перевернуть доску» работает из вкладки «Ходы»');
+  tbAct('flip');
+  App.closePanel();
+  /* справка — раздел настроек, без отдельного модального окна */
+  App.openSettings('help');
+  ok(doc.querySelector('#helpRules h3') !== null, '«Правила и объявления» встроены в категорию «Справка»');
+  ok(/История изменений/.test(txt('helpChangelog').slice(0, 4000)) || doc.querySelectorAll('#helpChangelog h3').length >= 9,
+    'история изменений — там же, вторым разделом');
+  /* о программе + проверка обновлений */
+  App.scrollToCat('about');
+  ok(doc.querySelector('#setNav button.on').dataset.sc === 'about', 'клик по категории подсвечивает её в боковине');
+  ok(new RegExp('Версия приложения: ' + V.replace('.', '\\.')).test(txt('versionLine')), '«О программе» показывает версию');
+  ok(/Партий в архиве/.test(txt('aboutInfo')), '«О программе» показывает данные хранилища');
+  doc.getElementById('btnCheckUpdates').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await wait(20);
-  ok(calls.updates >= 1, 'из «О программе» можно запустить проверку обновлений обёртки');
-  ok(!doc.querySelector('.modal'), 'окна закрыты');
+  ok(calls.updates >= 1, 'из настроек можно запустить проверку обновлений обёртки');
+  ok(!doc.querySelector('.modal'), 'модальных окон нет: последняя версия — только тост');
+  App.closeSettings();
 
   console.log('\n— Перевес материала с учётом превращений —');
   App.loadFen('1r5k/4P3/8/8/8/8/7K/8 w - - 0 1');

@@ -39,6 +39,7 @@
     playback: null,         /* просмотр партии из архива */
     live: null,             /* снимок живой партии на время просмотра */
     openPlayer: null,       /* открытый профиль */
+    isFull: false,          /* полный экран (для кнопки в настройках) */
     modal: null, pendingPromo: null
   };
 
@@ -470,9 +471,6 @@
     var el = $('logAll');
     var logs = S.logs();
     $('logCount').textContent = 'Записей: ' + logs.length + (logs.length >= S.LOG_CAP ? ' (журнал ограничен ' + S.LOG_CAP + ' записями)' : '');
-    var badge = $('evBadge');
-    badge.textContent = String(logs.length);
-    badge.hidden = logs.length === 0;
     if (!logs.length) {
       el.innerHTML = '<div class="log-item info"><span class="ic">\u2022</span>Событий пока нет</div>';
       return;
@@ -782,8 +780,8 @@
         '<b>archive.json</b> в папке данных приложения, а не в localStorage, поэтому квартильные предупреждения ' +
         'и автоматическое удаление старых партий не применяются: партии накапливаются на устройстве, пока хватает диска. ' +
         'Занятое место показано выше; средняя партия весит ' + S.sizeLabel(q.avg) + '.<br><br>' +
-        'Выгрузка в PGN остаётся полезной как резервная копия: кнопка «📦 Выгрузить…» скачивает файл, а архив можно ' +
-        'очистить вручную, если захочется освободить место.';
+        'Выгрузка в PGN остаётся полезной как резервная копия: кнопка «📦 Выгрузить всё и очистить архив» ' +
+        'в окне настроек (⚙ → «Архив») скачивает файл и очищает архив, а статистика профилей сохраняется.';
       return;
     }
     $('quotaReserve').style.display = '';
@@ -816,22 +814,26 @@
       '100 % — синий штрих на ней отмечает, где резерв начинается. Когда заканчивается и резерв, самая старая партия удаляется ' +
       'из хранилища автоматически, чтобы освободить место под новую; статистика профилей уменьшается на удалённую партию, ' +
       'а событие записывается в журнал.<br><br>' +
-      '<b>Как освободить место.</b> Выгрузите архив одним PGN-файлом кнопкой ниже: файл скачается, архив очистится, ' +
-      'а статистика профилей останется. Держать в браузере только недавние партии — рекомендуемый режим.';
+      '<b>Как освободить место.</b> Выгрузите архив одним PGN-файлом: кнопка «📦 Выгрузить всё и очистить архив» ' +
+      'в окне настроек (⚙ → «Архив»). Файл скачается, архив очистится, а статистика профилей останется. ' +
+      'Держать в браузере только недавние партии — рекомендуемый режим.';
   }
 
   function renderArchive() {
     var list = S.archive();
     var bytes = S.archiveBytes();
     var remind = parseInt(S.settings().archiveReminder, 10) || 30;
+    var remindOn = S.settings().archiveReminderOn !== false;
     renderQuota();
     var info = $('archInfo');
-    var over = list.length >= remind;
+    var over = remindOn && list.length >= remind;
     info.className = 'arch-info' + (over ? ' warn' : '');
     info.innerHTML = 'В архиве <b>' + list.length + '</b> ' + plural(list.length, 'партия', 'партии', 'партий') +
       ' · ' + S.sizeLabel(bytes) + '<br>Занято хранилищем: ' + S.usageLabel() +
       (over ? '<br>Накопилось много партий — выгрузите их в PGN-файл, архив очистится, а статистика профилей останется.'
-        : '<br>Напоминание о выгрузке — каждые ' + remind + ' ' + plural(remind, 'партию', 'партии', 'партий') + '.');
+        : (remindOn
+          ? '<br>Напоминание о выгрузке — каждые ' + remind + ' ' + plural(remind, 'партию', 'партии', 'партий') + '.'
+          : '<br>Напоминание о выгрузке отключено — включить можно в настройках (⚙ → «Архив»).'));
     var badge = $('arBadge');
     badge.textContent = String(list.length);
     badge.hidden = list.length === 0;
@@ -961,6 +963,7 @@
 
   function maybeRemindOffload() {
     if (S.isUnlimited()) return;
+    if (S.settings().archiveReminderOn === false) return;   /* пользователь отключил напоминания */
     var remind = parseInt(S.settings().archiveReminder, 10) || 30;
     var cnt = S.countGames();
     if (remind > 0 && cnt > 0 && cnt % remind === 0) {
@@ -1119,7 +1122,6 @@
     var counted = 0;
     ps.forEach(function (p) { counted += p.played; });
     $('playersCount').textContent = 'Профилей: ' + ps.length + ' · учтённых партий: ' + Math.round(counted / 2);
-    $('chkCountAnon').checked = S.settings().countAnon !== false;
     var body = $('playersBody');
     if (!ps.length) {
       body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6c769c;padding:16px">Профилей пока нет. ' +
@@ -1200,22 +1202,198 @@
   function keyOf(name) { return S.isAnon(name) ? S.ANON : name; }
   function stat(label, value) { return '<span class="st">' + esc(label) + '<b>' + esc(value) + '</b></span>'; }
 
-  /* ============================ МЕНЮ ПРИЛОЖЕНИЯ (⋮) ============================
-     Заменило нативную панель «Партия/Вид/Инструменты/Справка», которая в
-     полноэкранном режиме оставалась видимой полосой сверху. */
-  function appMenuOpen() { return $('appMenuPop').classList.contains('open'); }
-  function toggleAppMenu(force) {
-    var open = force !== undefined ? force : !appMenuOpen();
-    $('appMenuPop').classList.toggle('open', open);
-    $('btnAppMenu').setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) sfx('click');
+  /* ============================ ОКНО НАСТРОЕК (⚙) ============================
+     Заменило меню приложения «⋮» и отдельную кнопку «?»: дубли кнопок убраны,
+     технические пункты собраны в полноценном окне с категориями (Вид, Архив,
+     Движок, Журнал, Справка, О программе). Клик по категории прокручивает к
+     разделу; можно просто листать окно — боковина подсвечивает текущий раздел.
+     Секции окна постоянно живут в DOM, поэтому журнал, движок и галочки
+     доступны коду в любой момент, а окно открывается мгновенно. */
+  var SET_CATS = ['view', 'archive', 'engine', 'events', 'help', 'about'];
+  function settingsOpen() { return $('setWin').classList.contains('open'); }
+  function setNavActive(cat) {
+    document.querySelectorAll('#setNav button').forEach(function (b) { b.classList.toggle('on', b.dataset.sc === cat); });
   }
+  function scrollToCat(cat) {
+    setNavActive(cat);
+    var sec = document.querySelector('#setScroll section[data-set="' + cat + '"]');
+    var sc = $('setScroll');
+    if (sec && sc) { try { sc.scrollTop = Math.max(0, sec.offsetTop - 10); } catch (e) { /* нет раскладки — остаётся подсветка */ } }
+  }
+  function buildSettingsContent() {
+    var rules = $('helpRules');
+    if (rules) rules.innerHTML = RULES_HTML;
+    var ch = $('helpChangelog');
+    if (ch) {
+      var html = '';
+      CHANGELOG.forEach(function (row) {
+        html += '<h3>Версия ' + esc(row[0]) + '</h3><p>' + esc(row[1]) + '</p>';
+      });
+      ch.innerHTML = html;
+    }
+  }
+  function renderAbout() {
+    var i = P.info();
+    var q = S.quotaInfo();
+    var vl = $('versionLine');
+    if (vl) {
+      vl.innerHTML = 'Версия приложения: <b>' + esc(APP_VERSION) + '</b>' +
+        (BUILD_STAMP ? ' · сборка ' + esc(BUILD_STAMP) : '') +
+        ' · режим: <b>' + esc(i.desktop ? 'компьютер (' + i.env + ')' : 'браузер') + '</b>' +
+        (i.desktop && i.appVersion ? ' · обёртка ' + esc(i.appVersion) : '') +
+        '.<br>Обновления: браузер — перезагрузка страницы; PWA — сервис-воркер применит новую версию сам; ' +
+        'компьютер — кнопка «Проверить обновления» ниже.';
+    }
+    var ai = $('aboutInfo');
+    if (ai) {
+      /* в режиме «без ограничений» (десктоп-файл или снятый лимит браузера)
+         quotaInfo возвращает limit/pct = null — учитываем это, иначе toFixed(null)
+         ронял раздел «О программе» в десктопе */
+      var quotaLine = q.unlimited
+        ? 'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) +
+          ' — без ограничений' + (q.path ? ' (файл ' + esc(q.path) + ')' : '') + '.'
+        : 'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) +
+          ' из ' + S.sizeLabel(q.limit) + ' (' + (typeof q.pct === 'number' ? q.pct : 0).toFixed(0) + '%).';
+      ai.innerHTML = quotaLine + '<br>Всего данных в хранилище: ' + esc(S.usageLabel()) + '.' +
+        '<br>Полные правила шахмат, игра за обе стороны, компьютер, архив партий в PGN, профили соперников, ' +
+        'стрелки разбора и место под внешние движки (Rodent IV). Один файл, работает без интернета.';
+    }
+  }
+  /* живые данные окна настроек: журнал, движок, «О программе», галочки */
+  function renderSettingsLive() {
+    renderEvents();
+    renderEngineTab();
+    renderAbout();
+    var cp = $('chkPanelAuto');
+    if (cp) cp.checked = S.settings().panelAutoOpen !== false;
+    var cf = $('chkFullStart');
+    if (cf) cf.checked = S.settings().startFullscreen !== false;
+    var cr = $('chkReminder');
+    if (cr) {
+      var on = S.settings().archiveReminderOn !== false;
+      cr.checked = on;
+      $('reminderInput').disabled = !on;
+      setVal($('reminderInput'), S.settings().archiveReminder);
+    }
+    var ca = $('chkAutoFlip');
+    if (ca) { ca.checked = !!G.autoFlip; ca.disabled = !!botColor(); }
+    var cn = $('chkCountAnon');
+    if (cn) cn.checked = S.settings().countAnon !== false;
+    var sai = $('setArchInfo');
+    if (sai) {
+      var n = S.countGames();
+      sai.innerHTML = 'В архиве <b>' + n + '</b> ' + plural(n, 'партия', 'партии', 'партий') +
+        ' · ' + S.sizeLabel(S.archiveBytes()) +
+        '. Список партий, поиск и шкала места — во вкладке «Архив» бокового меню.';
+    }
+    var fs = $('btnSetFullscreen');
+    if (fs) fs.innerHTML = G.isFull ? '\u{1F5D7} Выйти из полного экрана' : '\u{1F5A5} Полный экран';
+  }
+  function openSettings(cat) {
+    hideTip();
+    var sp = $('soundPop');
+    if (sp.classList.contains('open')) {
+      sp.classList.remove('open');
+      $('btnSound').setAttribute('aria-expanded', 'false');
+    }
+    buildSettingsContent();
+    renderSettingsLive();
+    $('setWin').classList.add('open');
+    $('setWin').setAttribute('aria-hidden', 'false');
+    $('setBg').classList.add('on');
+    $('btnSettings').setAttribute('aria-expanded', 'true');
+    document.body.classList.add('settings-open');
+    scrollToCat(SET_CATS.indexOf(cat) >= 0 ? cat : 'view');
+    sfx('click');
+  }
+  function closeSettings() {
+    hideTip();
+    $('setWin').classList.remove('open');
+    $('setWin').setAttribute('aria-hidden', 'true');
+    $('setBg').classList.remove('on');
+    $('btnSettings').setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('settings-open');
+  }
+  function toggleSettings() { if (settingsOpen()) closeSettings(); else openSettings(); }
   function toggleFullscreen() {
     P.isFullscreen().then(function (on) {
       P.setFullscreen(!on);
       toast(!on ? 'ПОЛНЫЙ ЭКРАН' : 'ОКОННЫЙ РЕЖИМ', 'info', 'F11 — переключить обратно');
     });
   }
+
+  /* ============================ ПОДСКАЗКИ КНОПОК ============================
+     Один общий элемент #tip под <body> (position:fixed, верхний слой).
+     Старые CSS-подсказки через ::after внутри прокручиваемых панелей
+     обрезались краями секций, прятались под вкладки и растягивали панель
+     горизонтальным ползунком; теперь подсказка всегда видна целиком,
+     а длинный текст переносится по словам. */
+  var tipEl = null, tipTxt = null, tipArrow = null, tipOwner = null;
+  function ensureTip() {
+    if (tipEl) return tipEl;
+    tipEl = document.createElement('div');
+    tipEl.id = 'tip';
+    tipEl.className = 'js-tip';
+    tipEl.setAttribute('role', 'tooltip');
+    tipArrow = document.createElement('span');
+    tipArrow.className = 'tip-arrow';
+    tipTxt = document.createElement('span');
+    tipTxt.className = 'tip-txt';
+    tipEl.appendChild(tipArrow);
+    tipEl.appendChild(tipTxt);
+    tipEl.hidden = true;
+    document.body.appendChild(tipEl);
+    return tipEl;
+  }
+  function showTip(el) {
+    var text = el.getAttribute('data-tip');
+    if (!text) { hideTip(); return; }
+    ensureTip();
+    tipOwner = el;
+    tipTxt.textContent = text;
+    tipEl.hidden = false;
+    tipEl.classList.remove('above', 'below');
+    var r = el.getBoundingClientRect();
+    var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    var tw = tipEl.offsetWidth || 0, th = tipEl.offsetHeight || 0;
+    /* вниз, если помещается; иначе вверх; совсем не помещается — прижать к краю */
+    var below = r.bottom + 10 + th <= vh - 6 || r.top - 10 - th < 6;
+    var top = below ? r.bottom + 9 : Math.max(6, r.top - th - 9);
+    var left = Math.round(r.left + r.width / 2 - tw / 2);
+    left = Math.max(6, Math.min(left, Math.max(6, vw - tw - 6)));
+    tipEl.style.top = Math.round(top) + 'px';
+    tipEl.style.left = left + 'px';
+    tipEl.classList.add(below ? 'below' : 'above');
+    var ax = Math.round(r.left + r.width / 2 - left);
+    tipArrow.style.left = Math.max(12, Math.min(ax, Math.max(12, tw - 12))) + 'px';
+  }
+  function hideTip() {
+    tipOwner = null;
+    if (tipEl) tipEl.hidden = true;
+  }
+  function tipFromEvent(e) {
+    var t = e.target;
+    return t && t.closest ? t.closest('[data-tip]') : null;
+  }
+  function bindTooltips() {
+    document.addEventListener('pointerover', function (e) {
+      var t = tipFromEvent(e);
+      if (t === tipOwner) return;
+      if (t) showTip(t); else hideTip();
+    });
+    document.addEventListener('pointerout', function (e) {
+      if (!tipOwner) return;
+      var to = e.relatedTarget;
+      if (to && tipOwner.contains && tipOwner.contains(to)) return;   /* движение внутри кнопки */
+      hideTip();
+    });
+    document.addEventListener('pointerdown', function () { hideTip(); }, true);
+    document.addEventListener('scroll', function () { hideTip(); }, true);
+    window.addEventListener('resize', hideTip);
+    document.addEventListener('focusin', function (e) { var t = tipFromEvent(e); if (t) showTip(t); });
+    document.addEventListener('focusout', hideTip);
+  }
+
   var CHANGELOG = [
     ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
     ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
@@ -1226,46 +1404,11 @@
     ['2.2', 'Панель управления переехала во вкладку «Ходы» двумя рядами; материал — колонка слева серыми силуэтами; меню-оверлей без сдвига доски; подсказки под кнопками без обрезания; автоповорот только для двух игроков; название окна Chess; приоритет Windows; конвейер релизов.'],
     ['2.3', 'Архив в десктопе хранится файлом на устройстве без ограничений (и отключаемый лимит в браузере); перевес материала отдельной строкой под именем; «Отмена» в диалоге превращения по центру; стрелки: правый клик и тяга в клетке рисуют круг, повтор удаляет пометку, короткий левый клик или ход стирают всё; убран подзаголовок под логотипом; убраны лишние полосы прокрутки в панели; «История изменений» в меню приложения; релизы и тесты только под Windows.'],
     ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
+    ['2.4', 'Меню приложения «⋮» пересобрано в полноценное окно настроек с категориями: Вид, Архив, Движок, Журнал, Справка и О программе — переход кликом по категории или обычной прокруткой, ползунок окна стилизован под дизайн приложения. Вкладки «Журнал» и «Движок» переехали из бокового меню в настройки; «Перевернуть доску» осталось во вкладке «Ходы»; дубли кнопок (новая партия, вернуть ход, сохранение, выгрузка, стрелки, FEN/PGN, Lichess) убраны — они уже есть в основном меню. Подсказки кнопок переведены в один верхний слой с переносом текста: больше не появляются горизонтальные ползунки и описания не прячутся под вкладки. Напоминание о выгрузке архива можно отключить (настройки → «Архив»). Ошибка проверки обновлений больше не вываливает простыню HTTP-заголовков: короткое сообщение, полный текст — в раскрывающемся блоке «Технические подробности».'],
     ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе.'],
   ];
-  function showChangelog() {
-    var html = '<h2>История изменений</h2><div class="rules-body">';
-    CHANGELOG.forEach(function (row) {
-      html += '<h3>Версия ' + esc(row[0]) + '</h3><p>' + esc(row[1]) + '</p>';
-    });
-    html += '</div><div class="btns" style="margin-top:12px"><button class="btn primary wide" data-a="close">Закрыть</button></div>';
-    var box = openModal(html, false, null);
-    box.classList.add('wide');
-    box.querySelector('[data-a=close]').onclick = function () { closeModal(); };
-  }
-
-  function showAbout() {
-    var i = P.info();
-    var q = S.quotaInfo();
-    /* в режиме «без ограничений» (десктоп-файл или снятый лимит браузера)
-       quotaInfo возвращает limit/pct = null — учитываем это, иначе toFixed(null)
-       ронял окно «О программе» в десктопе */
-    var quotaLine = q.unlimited
-      ? 'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) +
-        ' — без ограничений' + (q.path ? ' (файл ' + esc(q.path) + ')' : '') + '.'
-      : 'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) +
-        ' из ' + S.sizeLabel(q.limit) + ' (' + (typeof q.pct === 'number' ? q.pct : 0).toFixed(0) + '%).';
-    openModal('<h2>О программе</h2>' +
-      '<p><b>Шахматы, версия ' + esc(APP_VERSION) + '</b>' + (BUILD_STAMP ? ' (сборка ' + esc(BUILD_STAMP) + ')' : '') + '<br>' +
-      'Режим запуска: ' + esc(i.desktop ? 'приложение на компьютере (' + i.env + ')' : 'браузер') +
-      (i.desktop && i.appVersion ? ', обёртка ' + esc(i.appVersion) : '') + '.<br>' +
-      quotaLine + '<br>Всего данных в хранилище: ' + esc(S.usageLabel()) + '.</p>' +
-      '<p>Полные правила шахмат, игра за обе стороны, компьютер, архив партий в PGN, профили соперников, ' +
-      'стрелки разбора и место под внешние движки (Rodent IV). Один файл, работает без интернета.</p>' +
-      '<div class="btns"><button class="btn" data-a="updates">Проверить обновления</button>' +
-      '<button class="btn" data-a="manual">⬇ Скачать обновление вручную</button>' +
-      '<button class="btn primary" data-a="close">Закрыть</button></div>')
-      .querySelector('[data-a=close]').onclick = function () { closeModal(); };
-    var ub = document.querySelector('.modal [data-a=updates]');
-    if (ub) ub.onclick = function () { closeModal(); checkUpdates(); };
-    var mb = document.querySelector('.modal [data-a=manual]');
-    if (mb) mb.onclick = function () { closeModal(); openReleases(); };
-  }
+  function showChangelog() { openSettings('help'); }
+  function showAbout() { openSettings('about'); }
   /* страница релизов GitHub — резервный путь обновления: приложение без
      цифровой подписи, и Windows может блокировать автоустановку */
   var RELEASES_URL = 'https://github.com/naemnik6/Chess/releases/latest';
@@ -1274,6 +1417,18 @@
     res = res || {};
     var ok = !!res.ok;
     var head = ok ? (res.reason === 'up-to-date' ? 'Обновлений нет' : 'Обновление') : 'Проверить обновления не удалось';
+    /* electron-updater при сетевых ошибках (в т.ч. 404) дописывает к сообщению
+       дамп HTTP-заголовков с серверными куками — в окне показываем короткую
+       суть, а простыню прячем в раскрывающийся блок «Технические подробности» */
+    var full = String(res.message || 'Обёртка не вернула подробностей.');
+    var shortMsg = full.split(/\s*Headers:/)[0].replace(/\s+/g, ' ').trim();
+    if (shortMsg.length > 500) shortMsg = shortMsg.slice(0, 500) + '…';
+    var hasMore = /Headers:/.test(full) || !!res.error;
+    var tech = hasMore
+      ? '<details class="upd-tech"><summary>Технические подробности</summary>' +
+        '<div class="pgn-view" style="max-height:200px;margin-top:6px">' +
+        esc(full + (res.error ? '\n\n' + res.error : '')) + '</div></details>'
+      : '';
     var diagText = '';
     if (!ok && res.diag) {
       var d = res.diag;
@@ -1284,7 +1439,7 @@
         (d.lastError ? '\nПоследняя ошибка: ' + esc(d.lastError) : '') + '</div>';
     }
     var box = openModal('<h2>' + esc(head) + '</h2>' +
-      '<p>' + esc(res.message || 'Обёртка не вернула подробностей.') + '</p>' + diagText +
+      '<p>' + esc(shortMsg) + '</p>' + tech + diagText +
       '<div class="btns">' +
       (ok ? '' : '<button class="btn" data-a="manual">⬇ Скачать обновление вручную</button>') +
       '<button class="btn primary" data-a="close">' + (ok ? 'Понятно' : 'Закрыть') + '</button></div>');
@@ -1349,7 +1504,11 @@
   function togglePanel() { if (panelOpen()) closePanel(); else openPanel(); }
 
   /* ============================ ВКЛАДКИ ============================ */
+  var PANEL_TABS = ['moves', 'archive', 'players', 'game', 'position'];
   function switchTab(tab) {
+    /* «Журнал» и «Движок» переехали в окно настроек: старое сохранённое
+       значение вкладки из хранилища не должно оставлять панель пустой */
+    if (PANEL_TABS.indexOf(tab) < 0) tab = 'moves';
     G.tab = tab;
     S.setSetting('activeTab', tab);
     document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === tab); });
@@ -1357,11 +1516,9 @@
     renderTab();
   }
   function renderTab() {
-    if (G.tab === 'events') renderEvents();
-    else if (G.tab === 'archive') renderArchive();
+    if (G.tab === 'archive') renderArchive();
     else if (G.tab === 'players') renderPlayers();
     else if (G.tab === 'game') renderGameTab();
-    else if (G.tab === 'engine') renderEngineTab();
     else if (G.tab === 'position') renderPosition();
   }
   /* не трогаем значение поля, если в нём сейчас курсор пользователя */
@@ -1380,31 +1537,6 @@
     setVal($('nameBlack'), botColor() === 'b' ? botName() : (S.settings().meBlack || ''));
     $('nameWhite').disabled = botColor() === 'w';
     $('nameBlack').disabled = botColor() === 'b';
-    setVal($('reminderInput'), S.settings().archiveReminder);
-    var chkA = $('chkAutoFlip');
-    if (chkA) {
-      chkA.checked = !!G.autoFlip;
-      chkA.disabled = !!botColor();
-      chkA.parentNode.title = botColor()
-        ? 'В партиях с компьютером доска не переворачивается: вы всегда видите её со своей стороны'
-        : '';
-    }
-    var chk = $('chkPanelAuto');
-    if (chk) chk.checked = S.settings().panelAutoOpen !== false;
-    var chkF = $('chkFullStart');
-    if (chkF) {
-      chkF.checked = S.settings().startFullscreen !== false;
-      chkF.onchange = function () { S.setSetting('startFullscreen', chkF.checked); };
-    }
-    var vl = $('versionLine');
-    if (vl) {
-      vl.innerHTML = 'Версия приложения: <b>' + esc(APP_VERSION) + '</b>' +
-        (BUILD_STAMP ? ' · сборка ' + esc(BUILD_STAMP) : '') +
-        ' · режим: <b>' + esc(P.isDesktop() ? 'компьютер (' + P.info().env + ')' : 'браузер') + '</b>' +
-        (P.isDesktop() && P.info().appVersion ? ' · обёртка ' + esc(P.info().appVersion) : '') +
-        '.<br>Обновления: браузер — перезагрузка страницы; PWA — сервис-воркер применит новую версию сам; ' +
-        'компьютер — меню «Справка → Проверить обновления».';
-    }
   }
 
   /* ============================ ОБЩИЙ РЕНДЕР ============================ */
@@ -1417,9 +1549,7 @@
     P.setTitle('Chess — ' + $('statusBig').textContent.replace(/\s+/g, ' ').trim());
     $('arBadge').textContent = String(S.countGames());
     $('arBadge').hidden = S.countGames() === 0;
-    var evb = $('evBadge');
-    evb.textContent = String(S.logs().length);
-    evb.hidden = S.logs().length === 0;
+    if (settingsOpen()) renderSettingsLive();
   }
 
   function renderControls() {
@@ -1441,7 +1571,16 @@
     $('volIcon').textContent = audible ? (G.volume > 0.55 ? '\u{1F50A}' : '\u{1F509}') : '\u{1F507}';
     setVal($('volRange'), Math.round(G.volume * 100));
     $('volVal').textContent = G.sound ? Math.round(G.volume * 100) + '%' : 'выкл';
-    $('chkAutoFlip').checked = !!G.autoFlip;
+    var ca = $('chkAutoFlip');
+    if (ca) {
+      ca.checked = !!G.autoFlip;
+      ca.disabled = !!botColor();
+      ca.parentNode.title = botColor()
+        ? 'В партиях с компьютером доска не переворачивается: вы всегда видите её со своей стороны'
+        : '';
+    }
+    var cn = $('chkCountAnon');
+    if (cn) cn.checked = S.settings().countAnon !== false;
   }
   function setAct(act, enabled) {
     var b = document.querySelector('#toolbar button[data-act="' + act + '"]');
@@ -1827,15 +1966,11 @@
     inp.onkeydown = function (e) { if (e.key === 'Enter') box.querySelector('[data-a=yes]').click(); };
   }
 
-  function showHelp() {
-    openModal('<h2>Как играть и что объявляется</h2><div class="rules-body">' + RULES_HTML + '</div>' +
-      '<div class="btns" style="margin-top:14px"><button class="btn primary wide" data-a="close">Понятно</button></div>')
-      .querySelector('[data-a=close]').onclick = function () { closeModal(); };
-  }
+  function showHelp() { openSettings('help'); }
 
   var RULES_HTML =
     '<h3>Версия</h3><p>Шахматы ' + esc(APP_VERSION) + (BUILD_STAMP ? ' (сборка ' + esc(BUILD_STAMP) + ')' : '') +
-    '. Проверить обновления на компьютере: меню «Справка → Проверить обновления»; в браузере и PWA новая версия применяется сама.</p>' +
+    '. Проверить обновления на компьютере: настройки (⚙) → «О программе» → «Проверить обновления»; в браузере и PWA новая версия применяется сама.</p>' +
     '<h3>Ходы</h3><p>Нажмите на свою фигуру — подсветятся доступные ходы (точка — пустое поле, красный круг — взятие), затем нажмите на клетку назначения. Фигуру можно перетащить мышью или пальцем. Ходить можно за обе стороны по очереди.</p>' +
     '<h3>Шах</h3><p>Король под боем: клетка короля подсвечивается красным кольцом (подсветка лежит под фигурой и не засвечивает её), в статусе появляется «ШАХ!», в журнале — запись, в нотации — знак <code>+</code>.</p>' +
     '<h3>Мат</h3><p>Шах, от которого нет защиты. Партия заканчивается победой атакующей стороны (<code>1-0</code> или <code>0-1</code>), в нотации — <code>#</code>.</p>' +
@@ -1848,10 +1983,10 @@
     '<li><b>Сдача</b> — кнопка ⚑ под доской: поражение стороны, чей ход.</li></ul>' +
     '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
     '<h3>Архив партий</h3><p>После завершения партии предлагается сохранить её в архив: можно задать название и имена игроков. Сохранённую партию можно воспроизвести на доске, посмотреть её PGN, переименовать или удалить. Имена складываются в профили: сыграно, победы, ничьи, поражения, процент очков, маты, сдачи, личные встречи.</p>' +
-    '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать анонимные партии в статистике» на вкладке «Профили» разрешает или запрещает такой учёт, а кнопка «Очистить анонима» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
-    '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается на вкладке «Игра».</p>' +
+    '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать партии без имени (анонимные) в статистике» в настройках (⚙ → «Архив») разрешает или запрещает такой учёт, а кнопка «Очистить анонима» на вкладке «Профили» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
+    '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается в настройках (⚙ → «Архив»), там же напоминания можно отключить.</p>' +
     '<h3>Импорт PGN</h3><p>Кнопка «⬆ Импорт» принимает текст или файл с партиями. При импорте предлагается выбрать, учитывать ли эти партии в статистике профилей.</p>' +
-    '<h3>Горячие клавиши</h3><p><span class="kbd">←</span> <span class="kbd">→</span> — разбор ходов, <span class="kbd">↑</span> <span class="kbd">↓</span> — в начало/конец, <span class="kbd">F</span> — перевернуть доску, <span class="kbd">Z</span> — вернуть ход, <span class="kbd">N</span> — новая партия, <span class="kbd">Esc</span> — снять выделение или закрыть окно.</p>' +
+    '<h3>Горячие клавиши</h3><p><span class="kbd">←</span> <span class="kbd">→</span> — разбор ходов, <span class="kbd">↑</span> <span class="kbd">↓</span> — в начало/конец, <span class="kbd">F</span> — перевернуть доску, <span class="kbd">Z</span> — вернуть ход, <span class="kbd">N</span> — новая партия, <span class="kbd">M</span> — боковое меню, <span class="kbd">F11</span> — полный экран, <span class="kbd">Esc</span> — снять выделение или закрыть окно.</p>' +
     '<h3>Правила полностью</h3><p>Рокировка (включая запрет при шахе и через битое поле), взятие на проходе, превращение пешки с выбором фигуры, запрет ходов, оставляющих своего короля под шахом. Движок сверен с эталонным perft до 5-й глубины.</p>';
 
   /* ============================ ОБЪЯВЛЕНИЕ НАД ДОСКОЙ ============================ */
@@ -2226,8 +2361,6 @@
         w.classList.remove('open');
         $('btnSound').setAttribute('aria-expanded', 'false');
       }
-      var am = $('appMenuPop');
-      if (am.classList.contains('open') && !am.contains(e.target)) toggleAppMenu(false);
     });
     $('volIcon').onclick = toggleSound;
     $('volRange').oninput = function () {
@@ -2243,33 +2376,42 @@
       if (G.autoFlip) G.flipped = cur().turn === 'b';
       render(); save();
     };
-    $('btnHelp').onclick = showHelp;
 
-    /* меню приложения */
-    $('btnAppMenu').onclick = function (e) { e.stopPropagation(); toggleAppMenu(); };
-    $('appMenu').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-    $('appMenu').addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-am]');
+    /* окно настроек (⚙) */
+    bindTooltips();
+    $('btnSettings').onclick = function (e) { e.stopPropagation(); toggleSettings(); };
+    $('btnSetClose').onclick = closeSettings;
+    $('setBg').onclick = closeSettings;
+    $('setNav').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-sc]');
       if (!b) return;
-      toggleAppMenu(false);
-      var a = b.dataset.am;
-      if (a === 'new') newGame(false);
-      else if (a === 'undo') undo();
-      else if (a === 'save') { openPanel('archive'); $('btnSaveGame').click(); }
-      else if (a === 'offload') { openPanel('archive'); $('btnOffload').click(); }
-      else if (a === 'fullscreen') toggleFullscreen();
-      else if (a === 'flip') flipBoard();
-      else if (a === 'panel') togglePanel();
-      else if (a === 'autoflip') { $('chkAutoFlip').checked = !G.autoFlip; $('chkAutoFlip').onchange(); }
-      else if (a === 'marks') clearMarks(false);
-      else if (a === 'fen') { openPanel('position'); $('btnCopyFen').click(); }
-      else if (a === 'pgn') { openPanel('position'); $('btnCopyPgn').click(); }
-      else if (a === 'lichess') openLichess(pgnFor({}), null);
-      else if (a === 'help') showHelp();
-      else if (a === 'changelog') showChangelog();
-      else if (a === 'updates') checkUpdates();
-      else if (a === 'about') showAbout();
+      sfx('click');
+      scrollToCat(b.dataset.sc);
     });
+    /* прокрутка окна подсвечивает текущую категорию в боковине */
+    $('setScroll').addEventListener('scroll', function () {
+      var sc = $('setScroll');
+      var secs = sc.querySelectorAll('section[data-set]');
+      var cur0 = null;
+      for (var i = 0; i < secs.length; i++) {
+        if (secs[i].offsetTop - sc.scrollTop <= 30) cur0 = secs[i];
+      }
+      if (cur0) setNavActive(cur0.dataset.set);
+    });
+    $('btnSetFullscreen').onclick = toggleFullscreen;
+    $('btnSetPanel').onclick = function () { closeSettings(); togglePanel(); };
+    $('btnCheckUpdates').onclick = checkUpdates;
+    $('btnManualUpdate').onclick = openReleases;
+    $('chkFullStart').onchange = function () { S.setSetting('startFullscreen', $('chkFullStart').checked); };
+    $('chkReminder').onchange = function () {
+      var on = $('chkReminder').checked;
+      S.setSetting('archiveReminderOn', on);
+      $('reminderInput').disabled = !on;
+      addLog(on
+        ? 'Напоминание о выгрузке архива включено: каждые ' + (parseInt(S.settings().archiveReminder, 10) || 30) + ' партий.'
+        : 'Напоминание о выгрузке архива отключено.', 'info');
+      renderArchive();
+    };
 
     /* выдвижное меню */
     $('btnPanel').onclick = function (e) { e.stopPropagation(); togglePanel(); };
@@ -2430,6 +2572,7 @@
       $('reminderInput').value = v;
       S.setSetting('archiveReminder', v);
       renderArchive();
+      if (settingsOpen()) renderSettingsLive();
     };
 
     /* вкладка «Движок» */
@@ -2523,6 +2666,9 @@
       var t = e.target;
       var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
       if (G.modal) { if (e.key === 'Escape') closeModal(); return; }
+      /* окно настроек модально по клавиатуре: игровые хоткеи не должны
+         срабатывать за его спиной, Esc закрывает само окно */
+      if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
       if (typing) return;
       var k = e.key;
       if (k === 'ArrowLeft') { e.preventDefault(); navigate(G.view - 1); }
@@ -2533,6 +2679,7 @@
       else if (k === 'z' || k === 'Z' || k === 'я' || k === 'Я') { if (e.ctrlKey || e.metaKey) e.preventDefault(); undo(); }
       else if (k === 'n' || k === 'N' || k === 'т' || k === 'Т') newGame(false);
       else if (k === 'Escape') {
+        if (settingsOpen()) { closeSettings(); return; }
         var w = $('soundPop');
         if (w.classList.contains('open')) { w.classList.remove('open'); return; }
         if (panelOpen()) { closePanel(); return; }
@@ -2580,14 +2727,14 @@
     P.onMenu('new', function () { newGame(false); });
     P.onMenu('undo', function () { undo(); });
     P.onMenu('save', function () { openPanel('archive'); var b = $('btnSaveGame'); if (b) b.click(); });
-    P.onMenu('offload', function () { openPanel('archive'); var b = $('btnOffload'); if (b) b.click(); });
+    P.onMenu('offload', function () { openSettings('archive'); var b = $('btnOffload'); if (b) b.click(); });
     P.onMenu('flip', flipBoard);
     P.onMenu('panel', function () { togglePanel(); });
     P.onMenu('marks', function () { clearMarks(false); });
     P.onMenu('fen', function () { openPanel('position'); $('btnCopyFen').click(); });
     P.onMenu('pgn', function () { openPanel('position'); $('btnCopyPgn').click(); });
     P.onMenu('lichess', function () { openLichess(pgnFor({}), null); });
-    P.onMenu('help', showHelp);
+    P.onMenu('help', function () { openSettings('help'); });
   }
 
   /* События обновлений из обёртки: каждый этап (checking-for-update,
@@ -2625,6 +2772,10 @@
     E.restoreInstalled().then(function () { render(); }).catch(function () { });
     P.notifyReady();
     registerServiceWorker();
+    try {
+      P.isFullscreen().then(function (on) { G.isFull = !!on; }).catch(function () { });
+      P.onFullscreenChange(function (on) { G.isFull = !!on; if (settingsOpen()) renderSettingsLive(); });
+    } catch (e) { /* не все окружения отдают состояние полного экрана — не критично */ }
     bindDesktopMenu();
     bindUpdaterEvents();
     bind();
@@ -2666,8 +2817,11 @@
       return 'https://lichess.org/analysis/' + encodeURIComponent(C.toFen(cur())).replace(/%20/g, '_').replace(/%2F/g, '/');
     },
     openLichess: openLichess, checkQuota: checkQuota, renderQuota: renderQuota,
-    showChangelog: showChangelog, CHANGELOG: CHANGELOG,
-    toggleAppMenu: toggleAppMenu, appMenuOpen: appMenuOpen, toggleFullscreen: toggleFullscreen,
+    showChangelog: showChangelog, CHANGELOG: CHANGELOG, showHelp: showHelp,
+    openSettings: openSettings, closeSettings: closeSettings, settingsOpen: settingsOpen,
+    toggleSettings: toggleSettings, scrollToCat: scrollToCat, SET_CATS: SET_CATS,
+    maybeRemindOffload: maybeRemindOffload, showTip: showTip, hideTip: hideTip,
+    toggleFullscreen: toggleFullscreen,
     showAbout: showAbout, checkUpdates: checkUpdates,
     version: function () {
       return { app: APP_VERSION, build: BUILD_STAMP, env: P.info().env, wrapper: P.info().appVersion };

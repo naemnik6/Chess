@@ -60,7 +60,7 @@
     mode: 'hotseat', level: 'medium', volume: 0.75, sound: true,
     flipped: false, autoFlip: false,
     meWhite: '', meBlack: '',
-    countAnon: true, archiveReminder: 30, activeTab: 'moves'
+    countAnon: true, archiveReminder: 30, archiveReminderOn: true, activeTab: 'moves'
   };
 
   var set = {};

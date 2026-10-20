@@ -43,15 +43,70 @@ h1{font-size:clamp(19px,2.6vw,27px);margin:0;letter-spacing:.4px;font-weight:800
 .head-status.draw{border-color:#2f5d80;background:#12222f;color:var(--draw)}
 @media (max-width:560px){ .head-status{display:none} }
 
-/* ---------- меню приложения (⋮) ---------- */
-.pop-wide{width:318px;padding:12px 12px 14px}
-.am-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
-.am-grid button{appearance:none;border:1px solid var(--line);background:#1b2138;color:var(--text);
-  border-radius:9px;padding:8px 9px;font-size:12px;font-weight:650;cursor:pointer;font-family:inherit;
-  display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:left;transition:.13s}
-.am-grid button:hover{background:#263055;border-color:#4a568c}
-.am-k{color:var(--muted2);font-size:10.5px;font-weight:800;border:1px solid var(--line);border-radius:5px;padding:0 4px}
-.pop-wide .pop-title{margin-bottom:6px}
+/* ---------- окно настроек (⚙) ---------- */
+.set-bg{position:fixed;inset:0;z-index:170;background:rgba(5,7,16,.62);opacity:0;pointer-events:none;transition:opacity .18s}
+.set-bg.on{opacity:1;pointer-events:auto}
+.set-win{position:fixed;z-index:180;left:50%;top:50%;width:min(940px,calc(100vw - 28px));height:min(700px,calc(100vh - 32px));
+  transform:translate(-50%,-48%) scale(.985);display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#1e2440,#151a2e);border:1px solid #39416b;border-radius:16px;
+  box-shadow:0 30px 80px rgba(0,0,0,.65);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+.set-win.open{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.set-head{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.set-ic{font-size:17px}
+.set-title{font-size:16px;font-weight:800;letter-spacing:.3px}
+.set-head-hint{margin-left:auto;text-align:right}
+.set-head .icon-btn{flex:0 0 auto}
+.set-body{display:flex;flex:1;min-height:0}
+.set-nav{flex:0 0 172px;display:flex;flex-direction:column;gap:4px;padding:12px 10px;overflow-y:auto;
+  border-right:1px solid var(--line);background:#151a2e;border-radius:0 0 0 15px}
+.set-nav button{appearance:none;border:1px solid transparent;background:transparent;color:var(--muted);
+  border-radius:9px;padding:9px 10px;font-size:12.6px;font-weight:700;cursor:pointer;font-family:inherit;
+  text-align:left;transition:.13s}
+.set-nav button:hover{color:var(--text);background:#1c2238}
+.set-nav button.on{background:linear-gradient(180deg,#2b3459,#232b4b);border-color:#4a568c;color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.set-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px 18px 22px;scroll-behavior:smooth}
+.set-scroll section{margin-bottom:26px;scroll-margin-top:6px}
+.set-scroll section:last-child{margin-bottom:4px}
+.set-h{margin:0 0 10px;font-size:14.5px;color:#fff;letter-spacing:.3px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+.set-h2{margin-top:22px}
+.set-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+/* правила и журнал изменений внутри настроек — без внутренней прокрутки:
+   листается всё окно (перебиваем .rules-body, идущий ниже по файлу) */
+.rules-body.set-rules{max-height:none;overflow:visible;font-size:12.8px}
+.set-rules h3{font-size:13.5px;margin:14px 0 5px;color:var(--gold)}
+#setScroll .log-all{flex:none;max-height:340px;padding-right:4px}
+/* кастомный ползунок настроек — в общем стиле приложения */
+.set-scroll::-webkit-scrollbar,.set-nav::-webkit-scrollbar{width:9px}
+.set-scroll::-webkit-scrollbar-track,.set-nav::-webkit-scrollbar-track{background:#10152a;border-radius:5px}
+.set-scroll::-webkit-scrollbar-thumb,.set-nav::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#414e85,#2c3560);border-radius:5px;border:2px solid #10152a}
+.set-scroll::-webkit-scrollbar-thumb:hover,.set-nav::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#5563a5,#3a4573)}
+.set-scroll,.set-nav{scrollbar-width:thin;scrollbar-color:#414e85 #10152a}
+@media (max-width:700px){
+  .set-body{flex-direction:column}
+  .set-nav{flex:0 0 auto;flex-direction:row;border-right:0;border-bottom:1px solid var(--line);
+    overflow-x:auto;overflow-y:hidden;padding:8px;border-radius:0}
+  .set-nav button{white-space:nowrap;flex:0 0 auto}
+  .set-head-hint{display:none}
+}
+
+/* ---------- единая подсказка (один слой поверх всего) ----------
+   Рисуется JS-ом в элементе #tip под <body>: position:fixed, поэтому не
+   обрезается вкладками, не прячется под панели и не растягивает прокрутку.
+   Длинные описания переносятся по словам. */
+.js-tip{position:fixed;z-index:600;max-width:250px;background:#0a0d1a;color:#e9ecfa;border:1px solid #454f80;
+  padding:6px 10px;border-radius:9px;font-size:11.5px;font-weight:600;line-height:1.35;
+  box-shadow:0 10px 24px rgba(0,0,0,.55);pointer-events:none;white-space:normal;overflow-wrap:break-word;
+  animation:tipIn .12s ease}
+.js-tip[hidden]{display:none}
+.js-tip .tip-arrow{position:absolute;width:8px;height:8px;background:#0a0d1a;transform:translateX(-50%) rotate(45deg)}
+.js-tip.below .tip-arrow{top:-5px;border-left:1px solid #454f80;border-top:1px solid #454f80}
+.js-tip.above .tip-arrow{bottom:-5px;border-right:1px solid #454f80;border-bottom:1px solid #454f80}
+
+/* «технические подробности» ошибки обновлений — раскрываемый блок */
+.upd-tech{margin:8px 0}
+.upd-tech summary{cursor:pointer;font-size:12px;color:var(--accent);font-weight:700}
 
 /* ---------- раскладка ---------- */
 main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:nowrap}
@@ -154,24 +209,10 @@ main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:n
 .toolbar.tab-toolbar .tb-row{display:flex;gap:5px;justify-content:center;align-items:center;flex-wrap:nowrap}
 .toolbar.tab-toolbar button{flex:0 0 auto}
 
-/* подсказки при наведении */
-[data-tip]{position:relative}
-[data-tip]:hover::after{
-  content:attr(data-tip);position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%);
-  background:#0a0d1a;color:#e9ecfa;border:1px solid #454f80;padding:6px 10px;border-radius:9px;
-  font-size:11.5px;font-weight:600;line-height:1.35;white-space:nowrap;z-index:320;pointer-events:none;
-  box-shadow:0 10px 24px rgba(0,0,0,.55);opacity:0;animation:tipIn .12s ease forwards}
-[data-tip]:hover::before{content:"";position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);
-  border:5px solid transparent;border-bottom-color:#454f80;z-index:320;pointer-events:none;opacity:0;animation:tipIn .12s ease forwards}
+/* подсказки при наведении — единый элемент #tip (см. .js-tip выше):
+   старые ::after-подсказки внутри прокручиваемых панелей обрезались,
+   прятались под вкладки и растягивали панель горизонтальным ползунком */
 @keyframes tipIn{to{opacity:1}}
-/* внутри прокручиваемых панелей подсказка смотрит вверх: вниз — появится полоса прокрутки */
-.tab-body [data-tip]:hover::after,.modal [data-tip]:hover::after{top:auto;bottom:calc(100% + 9px)}
-.tab-body [data-tip]:hover::before,.modal [data-tip]:hover::before{top:auto;bottom:calc(100% + 4px);
-  border-bottom-color:transparent;border-top-color:#454f80}
-/* у правого края экрана подсказка прижимается вправо и не обрезается */
-.top-right [data-tip]:hover::after{left:auto;right:-8px;transform:none;max-width:74vw;white-space:normal;text-align:left}
-.top-right [data-tip]:hover::before{left:auto;right:12px;transform:none}
-@media (max-width:520px){ [data-tip]:hover::after{white-space:normal;width:180px} }
 
 /* ---------- быстрые ссылки-кнопки ---------- */
 .link-btn{appearance:none;background:#1b2138;border:1px solid var(--line);color:#c6cde6;border-radius:999px;
@@ -409,7 +450,7 @@ input[type=range].vol{flex:1;accent-color:var(--accent);height:22px;cursor:point
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.6px;white-space:pre-wrap;line-height:1.6;color:#c6cde6}
 
 /* ---------- всплывающее объявление ---------- */
-.toast-wrap{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);z-index:60;pointer-events:none;width:max-content;max-width:90%}
+.toast-wrap{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);z-index:190;pointer-events:none;width:max-content;max-width:90%}
 .toast{background:rgba(10,13,26,.93);border:1px solid #4a568c;border-radius:14px;padding:12px 22px;
   font-size:clamp(17px,3.2vw,26px);font-weight:900;letter-spacing:1px;text-align:center;
   box-shadow:0 18px 40px rgba(0,0,0,.6);animation:toastIn .22s ease, toastOut .4s ease 2s forwards;text-transform:uppercase}
@@ -503,3 +544,7 @@ body.desktop .cap-row .chip{width:27px;height:27px}
 body.desktop .cap-row .chip svg{width:23px;height:23px}
 body.desktop .log-item{font-size:13px}
 body.desktop .hint{font-size:12.2px}
+body.desktop .set-title{font-size:17.5px}
+body.desktop .set-nav{flex:0 0 190px}
+body.desktop .set-nav button{font-size:13.6px;padding:10px 11px}
+body.desktop .set-scroll{padding:18px 22px 24px}
