@@ -1,7 +1,7 @@
 {
   "name": "chesster",
   "productName": "Chess",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Настольная версия браузерных шахмат: один файл index.html, архив партий, профили, задел под Rodent IV.",
   "main": "main.js",
   "author": "Chesster",
@@ -10,10 +10,8 @@
   "scripts": {
     "start": "electron .",
     "icons": "python3 icon.py",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux"
+    "dist": "electron-builder --win",
+    "dist:win": "electron-builder --win"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -55,21 +53,6 @@
         "portable"
       ],
       "icon": "icons/icon.ico"
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "icon": "icons/icon.icns",
-      "category": "public.app-category.games"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "icon": "icons/icon-512.png",
-      "category": "Game"
     },
     "nsis": {
       "oneClick": false,

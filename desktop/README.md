@@ -14,17 +14,19 @@ npm install        # поставит electron и electron-builder
 npm start          # открывает приложение с ../index.html внутри
 ```
 
-## Сборка установщиков (exe / dmg / AppImage)
+## Сборка установщика (exe, Windows)
+
+Целевая платформа — **Windows**; конфигурации mac/linux из сборки убраны.
 
 ```bash
-npm run dist        # все платформы текущей ОС
-npm run dist:win    # Windows: NSIS-установщик + portable exe  → desktop/dist/
-npm run dist:mac    # macOS:   dmg                             → desktop/dist/
-npm run dist:linux  # Linux:   AppImage + deb                  → desktop/dist/
+npm run dist        # Windows: NSIS-установщик + portable exe  → desktop/dist/
 ```
 
+Или одной командой из корня проекта: **`push-release.bat`** — коммит, пуш и тег `v<версия>`,
+после чего установщик собирает и публикует GitHub Actions (`.github/workflows/release.yml`).
+
 Готовые файлы появляются в `desktop/dist/`. Для Windows это
-`Шахматы Setup x.x.x.exe` (установщик) и `Шахматы x.x.x.exe` (portable, работает
+`Chess Setup x.x.x.exe` (установщик) и `Chess x.x.x.exe` (portable, работает
 без установки с флешки). Настройки `electron-builder` — в `package.json` (блок `build`).
 
 Иконки пересоздаются командой `npm run icons` (нужен Pillow; векторный рендер —
@@ -62,7 +64,7 @@ npm run dist:linux  # Linux:   AppImage + deb                  → desktop/dist/
 | Системный диалог сохранения файлов | IPC `dialog:saveFile` — выгрузка архива PGN пишет файл куда скажет пользователь |
 | Ссылки (Lichess) в системном браузере | IPC `shell:openExternal`, внутри окна внешние переходы запрещены |
 | **Внешний движок отдельным процессом** | IPC `engine:spawn`: `child_process.spawn(exe)`, строки UCI ходят через stdin/stdout и IPC; движок — обычный процесс со своей оперативной памятью,хэш-таблицей и потоками |
-| Память устройства | Данные приложения лежат в `userData` Electron (не в профиле браузера); движок и его кэш живут в своей ОС-памяти; большие файлы пишутся на диск системными диалогами |
+| Память устройства | Данные приложения лежат в `userData` Electron (не в профиле браузера), архив партий — файлом `archive.json` без лимита; движок и его кэш живут в своей ОС-памяти; большие файлы пишутся на диск системными диалогами |
 | Безопасность | `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`; страница видит только мост `window.Chesster` из `preload.js` |
 
 Меню обёртки дублирует частые действия (новая партия, вернуть ход, перевернуть,
@@ -94,7 +96,7 @@ npm run dist:linux  # Linux:   AppImage + deb                  → desktop/dist/
 ```bash
 cd desktop/tauri
 cargo tauri dev      # разработка
-cargo tauri build    # установщики (msi/exe, dmg, AppImage/deb)
+cargo tauri build --target x86_64-pc-windows-msvc    # установщик msi/exe (Windows)
 ```
 
 Конфигурация — `tauri/tauri.conf.json`, команды на Rust — `tauri/src/main.rs`
@@ -110,7 +112,9 @@ cargo tauri build    # установщики (msi/exe, dmg, AppImage/deb)
 * Десктоп: меню «Справка → Проверить обновления». Автообновление работает, если установлен
   `electron-updater` и заполнен `build.publish` в `package.json` (провайдер GitHub, владелец и
   репозиторий подставьте свои). Без источника меню показывает текущую версию и подсказку.
-  Данные (архив партий, профили, настройки) лежат в `userData` и переустановку переживают.
+  Данные (профили, настройки) лежат в `userData` и переустановку переживают; архив партий
+хранится там же отдельным файлом `archive.json` — без ограничений по размеру (в браузере
+лимит действует, но отключается настройкой «Хранить архив без ограничения размера»).
 * PWA/браузер: новая версия применяется сервис-воркером по имени кэша `chesster-<версия>-<дата>`.
 
 ## Установка как веб-приложение (PWA)

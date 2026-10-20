@@ -56,7 +56,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const adv = side => {
     const el = doc.getElementById(side === 'w' ? 'capBottom' : 'capTop');
     const a = el.querySelector('.adv');
-    return a ? a.textContent : null;
+    return a ? (a.textContent.match(/\+\d+/) || [null])[0] : null;
   };
 
   const V = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).version;
@@ -88,7 +88,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(App.appMenuOpen(), 'меню открывается');
   const groups = [...doc.querySelectorAll('#appMenu .pop-title')].map(e => e.textContent);
   ok(groups.join(',') === 'Партия,Вид,Инструменты,Справка', 'группы меню повторяют бывшую нативную панель: ' + groups.join(' / '));
-  ok(doc.querySelectorAll('#appMenu button[data-am]').length === 15, 'в меню 15 действий');
+  ok(doc.querySelectorAll('#appMenu button[data-am]').length === 16, 'в меню 16 действий, включая историю изменений');
   doc.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true }));
   ok(!App.appMenuOpen(), 'клик мимо закрывает меню');
   am('flip');

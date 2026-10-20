@@ -280,8 +280,13 @@
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     endMarkDrag();
     if (!d) return;
-    if (!d.moved) { clearMarks(); return; }
-    if (to < 0) to = d.from;
+    if (!d.moved || to < 0 || to === d.from) {
+      /* правый клик без перетаскивания или внутри одной клетки — круг-пометка */
+      toggleMark({ type: 'circle', from: d.from, to: d.from });
+      sfx('mark');
+      renderMarks(); save();
+      return;
+    }
     toggleMark(to === d.from ? { type: 'circle', from: d.from, to: d.from } : { type: 'arrow', from: d.from, to: to });
     sfx('mark');
     renderMarks(); save();
@@ -316,14 +321,14 @@
     taken.sort(function (a, b) { return PIECE_ORDER[C.typeOf(a)] - PIECE_ORDER[C.typeOf(b)]; });
     var isTurn = !G.result && cur().turn === side;
     var sideName = nameFor(side) || nom(side);   /* без имени — просто «Белые»/«Чёрные» */
-    var html = '<span class="who"><span class="dot"></span>' + esc(sideName) +
-      (diff > 0 ? '<span class="adv" title="Перевес в материале">+' + diff + '</span>' : '') + '</span><span class="pcs">';
+    var html = '<span class="who"><span class="dot"></span>' + esc(sideName) + '</span><span class="pcs">';
     /* взятые фигуры показываем серыми силуэтами без подложек */
     for (var i = 0; i < taken.length; i++) {
       var cc = C.colorOf(taken[i]) === 'w' ? 'cw' : 'cb';
       html += '<span class="chip ' + cc + '" title="Взята: ' + PIECE_RU[C.typeOf(taken[i])] + '">' + pieceHTML(taken[i], 'cap') + '</span>';
     }
-    html += '</span>';
+    html += '</span>' +
+      (diff > 0 ? '<span class="adv" title="Перевес в материале по фактической расстановке">+' + diff + ' по материалу</span>' : '');
     el.innerHTML = html;
     el.className = 'cap-row' + (isTurn ? ' turn-here' : '');
   }
@@ -754,6 +759,34 @@
   }
   function renderQuota() {
     var q = S.quotaInfo();
+    var chkU = $('chkUnlimited');
+    if (chkU) {
+      chkU.checked = !!q.unlimited;
+      chkU.disabled = S.fileTransport();
+      chkU.parentNode.title = S.fileTransport()
+        ? 'В версии для компьютера архив хранится файлом на устройстве и не ограничен'
+        : 'В браузере отключать лимит рискованно: при переполнении localStorage новые партии могут не сохраниться';
+    }
+    if (q.unlimited) {
+      $('quotaPct').textContent = 'без лимита';
+      $('quotaPct').className = 'q-pct';
+      var fillU = $('quotaFill');
+      fillU.style.width = '100%';
+      fillU.className = 'qf qf-unlim';
+      $('quotaReserve').style.display = 'none';
+      $('quotaText').innerHTML = 'Занято <b>' + S.sizeLabel(q.used) + '</b> на устройстве · партий: ' + q.games +
+        (q.path ? '<br>Файл архива: <span style="word-break:break-all">' + esc(q.path) + '</span>'
+                : '<br>Ограничения размера нет: данные хранятся вне localStorage');
+      $('quotaHelp').innerHTML =
+        '<b>Режим без ограничений.</b> В версии для компьютера архив партий хранится обычным файлом ' +
+        '<b>archive.json</b> в папке данных приложения, а не в localStorage, поэтому квартильные предупреждения ' +
+        'и автоматическое удаление старых партий не применяются: партии накапливаются на устройстве, пока хватает диска. ' +
+        'Занятое место показано выше; средняя партия весит ' + S.sizeLabel(q.avg) + '.<br><br>' +
+        'Выгрузка в PGN остаётся полезной как резервная копия: кнопка «📦 Выгрузить…» скачивает файл, а архив можно ' +
+        'очистить вручную, если захочется освободить место.';
+      return;
+    }
+    $('quotaReserve').style.display = '';
     var pctEl = $('quotaPct');
     pctEl.textContent = q.pct.toFixed(q.pct < 10 ? 1 : 0) + '%';
     pctEl.className = 'q-pct' + (q.level ? ' lv' + q.level : '');
@@ -903,6 +936,7 @@
   /* пороги 80/90/95/100 % и вытеснение самых старых партий, когда резерв кончился */
   function checkQuota(evicted) {
     var q = S.quotaInfo();
+    if (q.unlimited) return;                 /* архив на устройстве: предупреждений нет */
     var prev = S.settings().archiveWarnLevel || 0;
     if (q.level > prev) {
       S.setSetting('archiveWarnLevel', q.level);
@@ -926,6 +960,7 @@
   }
 
   function maybeRemindOffload() {
+    if (S.isUnlimited()) return;
     var remind = parseInt(S.settings().archiveReminder, 10) || 30;
     var cnt = S.countGames();
     if (remind > 0 && cnt > 0 && cnt % remind === 0) {
@@ -1181,6 +1216,28 @@
       toast(!on ? 'ПОЛНЫЙ ЭКРАН' : 'ОКОННЫЙ РЕЖИМ', 'info', 'F11 — переключить обратно');
     });
   }
+  var CHANGELOG = [
+    ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
+    ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
+    ['1.2', 'Разгрузка интерфейса: вкладки и панель иконок с подсказками; архив партий в PGN с названиями и именами; профили соперников со счётом и личными встречами; анонимы; импорт PGN с выбором учёта в статистике; выгрузка архива файлом.'],
+    ['1.3', 'Меню открывается иконкой в правом верхнем углу, доска на всё окно; исправлено смещение фигур влево; выделено место под архив: шкала с процентами, резерв на 3 партии, пороги 80/90/95/100 %, автоудаление самых старых; кнопки «Скопировать и перейти на Lichess».'],
+    ['2.0', 'Версия для компьютера: обёртки Electron и Tauri, иконки, PWA с офлайн-кэшем; слой платформ и движков; размечено место под Rodent IV (UCI, пресеты, установка сборки); ссылка Lichess исправлена с мёртвого /import на /paste.'],
+    ['2.1', 'Полноэкранный запуск без нативной панели меню; меню приложения «⋮»; перевес материала считается по доске (корректно с превращениями); статус партии во вкладке «Ходы» с автооткрытием при итоге; чип состояния в шапке; версионирование и проверка обновлений.'],
+    ['2.2', 'Панель управления переехала во вкладку «Ходы» двумя рядами; материал — колонка слева серыми силуэтами; меню-оверлей без сдвига доски; подсказки под кнопками без обрезания; автоповорот только для двух игроков; название окна Chess; приоритет Windows; конвейер релизов.'],
+    ['2.3', 'Архив в десктопе хранится файлом на устройстве без ограничений (и отключаемый лимит в браузере); перевес материала отдельной строкой под именем; «Отмена» в диалоге превращения по центру; стрелки: правый клик и тяга в клетке рисуют круг, повтор удаляет пометку, короткий левый клик или ход стирают всё; убран подзаголовок под логотипом; убраны лишние полосы прокрутки в панели; «История изменений» в меню приложения; релизы и тесты только под Windows.'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; автообновления через GitHub Actions после привязки репозитория; NNUE-движок в браузере/десктопе.'],
+  ];
+  function showChangelog() {
+    var html = '<h2>История изменений</h2><div class="rules-body">';
+    CHANGELOG.forEach(function (row) {
+      html += '<h3>Версия ' + esc(row[0]) + '</h3><p>' + esc(row[1]) + '</p>';
+    });
+    html += '</div><div class="btns" style="margin-top:12px"><button class="btn primary wide" data-a="close">Закрыть</button></div>';
+    var box = openModal(html, false, null);
+    box.classList.add('wide');
+    box.querySelector('[data-a=close]').onclick = function () { closeModal(); };
+  }
+
   function showAbout() {
     var i = P.info();
     var q = S.quotaInfo();
@@ -1495,7 +1552,11 @@
     if (!drag) return;
     var from = drag.from, moved = drag.moved;
     endDrag();
-    if (!moved) return;
+    if (!moved) {
+      /* короткое нажатие левой кнопки стирает все стрелки и круги */
+      if (G.marks.length) clearMarks(true);
+      return;
+    }
     if (!canPlay()) { render(); return; }
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     if (to < 0 || to === from) { render(); return; }
@@ -2138,6 +2199,7 @@
       else if (a === 'pgn') { openPanel('position'); $('btnCopyPgn').click(); }
       else if (a === 'lichess') openLichess(pgnFor({}), null);
       else if (a === 'help') showHelp();
+      else if (a === 'changelog') showChangelog();
       else if (a === 'updates') checkUpdates();
       else if (a === 'about') showAbout();
     });
@@ -2168,6 +2230,13 @@
     };
 
     /* архив */
+    $('chkUnlimited').onchange = function () {
+      S.setSetting('archiveUnlimited', $('chkUnlimited').checked);
+      addLog($('chkUnlimited').checked
+        ? 'Ограничение размера архива отключено в настройках.'
+        : 'Ограничение размера архива включено снова: ' + S.sizeLabel(S.ARCHIVE_BUDGET) + ' + резерв.', 'arch');
+      render();
+    };
     $('archSearch').addEventListener('input', function () { renderArchive(); });
     $('btnSaveGame').onclick = function () {
       if (!G.sans.length) { toast('Партия пуста', 'info', 'сделайте хотя бы один ход'); return; }
@@ -2456,6 +2525,9 @@
 
   function init() {
     S.reload();                 /* перечитываем хранилище (важно при загрузке страницы) */
+    var moved = S.migrateLocalStorageArchive();
+    if (moved) addLog('Архив партий (' + moved + ' ' + plural(moved, 'партия', 'партии', 'партий') +
+      ') перенесён из localStorage в файл на устройстве: ограничения браузера больше не действуют.', 'arch');
     document.body.classList.toggle('desktop', P.isDesktop());
     E.on('info', function (d) {
       pushEngineLog('info depth ' + (d.depth || '?') + (d.score !== undefined ? ' score ' + d.score : '') +
@@ -2510,6 +2582,7 @@
       return 'https://lichess.org/analysis/' + encodeURIComponent(C.toFen(cur())).replace(/%20/g, '_').replace(/%2F/g, '/');
     },
     openLichess: openLichess, checkQuota: checkQuota, renderQuota: renderQuota,
+    showChangelog: showChangelog, CHANGELOG: CHANGELOG,
     toggleAppMenu: toggleAppMenu, appMenuOpen: appMenuOpen, toggleFullscreen: toggleFullscreen,
     showAbout: showAbout, checkUpdates: checkUpdates,
     version: function () {

@@ -44,7 +44,7 @@ header.top{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;margin-bott
 .logo .mark{width:42px;height:42px;flex:0 0 42px;background:linear-gradient(145deg,#2b3560,#1a2038);border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center}
 .logo .mark svg{width:28px;height:28px}
 h1{font-size:clamp(19px,2.6vw,27px);margin:0;letter-spacing:.4px;font-weight:800}
-.sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+
 .top-right{margin-left:auto;display:flex;gap:8px;align-items:center;flex:0 0 auto}
 
 /* ---------- чип статуса в шапке ---------- */
@@ -143,7 +143,7 @@ main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:n
 .cap-row .chip.cw svg{filter:grayscale(1) brightness(.66)}
 .cap-row .chip.cb svg{filter:grayscale(1) invert(.66)}
 .cap-row .chip svg{width:22px;height:22px}
-.cap-row .adv{margin-left:auto;font-size:12.5px;font-weight:800;color:var(--good)}
+.cap-row .adv{display:block;margin-top:3px;font-size:11.4px;font-weight:800;color:var(--good);letter-spacing:.2px}
 .cap-row.turn-here{border-color:#4a568c}
 .cap-row.turn-here .who{color:var(--gold)}
 .cap-row .dot{width:8px;height:8px;border-radius:50%;background:transparent;display:inline-block;flex:0 0 auto}
@@ -178,6 +178,10 @@ main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:n
 [data-tip]:hover::before{content:"";position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);
   border:5px solid transparent;border-bottom-color:#454f80;z-index:320;pointer-events:none;opacity:0;animation:tipIn .12s ease forwards}
 @keyframes tipIn{to{opacity:1}}
+/* внутри прокручиваемых панелей подсказка смотрит вверх: вниз — появится полоса прокрутки */
+.tab-body [data-tip]:hover::after,.modal [data-tip]:hover::after{top:auto;bottom:calc(100% + 9px)}
+.tab-body [data-tip]:hover::before,.modal [data-tip]:hover::before{top:auto;bottom:calc(100% + 4px);
+  border-bottom-color:transparent;border-top-color:#454f80}
 /* у правого края экрана подсказка прижимается вправо и не обрезается */
 .top-right [data-tip]:hover::after{left:auto;right:-8px;transform:none;max-width:74vw;white-space:normal;text-align:left}
 .top-right [data-tip]:hover::before{left:auto;right:12px;transform:none}
@@ -283,7 +287,7 @@ main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:n
 .btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#a3c2ff,#6b91f5);border-color:#8fadff}
 .btn.danger{border-color:#6d3040;color:#ffb3b3}
 .btn.danger:hover:not(:disabled){background:linear-gradient(180deg,#4a2130,#38192a);border-color:#8f3a4d}
-.btn.wide{width:100%}
+.btn.wide{width:100%;grid-column:1 / -1}
 .btn-mini{padding:7px 10px;font-size:12.2px;border-radius:9px}
 .btns{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .btns3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -344,6 +348,7 @@ input[type=range].vol{flex:1;accent-color:var(--accent);height:22px;cursor:point
 .qf.lv90{background:linear-gradient(90deg,#f0a95c,#e08a34)}
 .qf.lv95{background:linear-gradient(90deg,#f08a5c,#e0603a)}
 .qf.lv100{background:linear-gradient(90deg,#ff6b6b,#d93a4a)}
+.qf.qf-unlim{background:linear-gradient(90deg,#5b83f0,#7aa2ff)}
 .qres{position:absolute;top:-2px;bottom:-2px;width:2px;background:#7aa2ff;opacity:.9}
 .quota-help{margin-top:8px}
 .quota-help summary{cursor:pointer;font-size:11.6px;color:var(--accent);font-weight:700;list-style:none}
@@ -458,8 +463,8 @@ footer.foot{margin-top:24px;text-align:center;color:#6f7899;font-size:11.8px;lin
   .btns3{grid-template-columns:1fr}
 }
 
-/* на невысоких окнах прячем подпись шапки, чтобы доска была крупнее */
-@media (max-height:840px){ .sub{display:none} header.top{margin-bottom:10px} }
+/* на невысоких окнах шапка компактнее */
+@media (max-height:840px){ header.top{margin-bottom:10px} }
 
 /* ---------- движки ---------- */
 .engine-list{display:flex;flex-direction:column;gap:7px}
@@ -526,7 +531,6 @@ body.desktop .hint{font-size:12.2px}
       <div class="mark"><svg viewBox="0 0 45 45" aria-hidden="true"><use href="#pc-wN"/></svg></div>
       <div>
         <h1>Chess</h1>
-        <div class="sub">Полные правила · игра за обе стороны · архив партий</div>
       </div>
       <span class="head-status" id="headStatus" title="Текущее состояние партии">Ход белых</span>
     </div>
@@ -574,6 +578,7 @@ body.desktop .hint{font-size:12.2px}
           <div class="pop-title">Справка</div>
           <div class="am-grid">
             <button data-am="help" role="menuitem">Правила и объявления</button>
+            <button data-am="changelog" role="menuitem">История изменений</button>
             <button data-am="updates" role="menuitem">Проверить обновления</button>
             <button data-am="about" role="menuitem">О программе</button>
           </div>
@@ -685,6 +690,7 @@ body.desktop .hint{font-size:12.2px}
               <span class="qres" id="quotaReserve" title="Здесь начинается резерв на 3 партии"></span>
             </div>
             <div class="hint" id="quotaText"></div>
+            <label class="chk"><input type="checkbox" id="chkUnlimited"> Хранить архив без ограничения размера</label>
             <details class="quota-help">
               <summary>Сколько это партий и что будет при заполнении</summary>
               <div class="hint" id="quotaHelp"></div>
@@ -1502,8 +1508,32 @@ body.desktop .hint{font-size:12.2px}
   var set = {};
 
   var archiveData, playersData, logData, gameData;
+  /* ---------- архив файлом на устройстве (десктоп) ----------
+     Обёртка предоставляет синхронный мост archiveRead/archiveWrite: архив
+     хранится обычным файлом в userData, без браузерных квот localStorage. */
+  function fileBridge() {
+    try {
+      var b = (typeof window !== 'undefined' && window.Chesster) || null;
+      return b && typeof b.archiveRead === 'function' && typeof b.archiveWrite === 'function' ? b : null;
+    } catch (e) { return null; }
+  }
+  function fileTransport() { return !!fileBridge(); }
+  function archiveFilePath() {
+    var b = fileBridge();
+    try { return b && typeof b.archivePath === 'function' ? b.archivePath() : null; } catch (e) { return null; }
+  }
+
   function reloadBlocks() {
-    archiveData = load(KEYS.archive, []);
+    var fb = fileBridge();
+    if (fb) {
+      var raw = null;
+      try { raw = fb.archiveRead(); } catch (e) { raw = null; }
+      var parsed = null;
+      try { parsed = raw ? JSON.parse(raw) : null; } catch (e) { parsed = null; }
+      archiveData = Array.isArray(parsed) ? parsed : [];
+    } else {
+      archiveData = load(KEYS.archive, []);
+    }
     if (!Array.isArray(archiveData)) archiveData = [];
     sizeById = {};
     playersData = load(KEYS.players, {});
@@ -1593,9 +1623,35 @@ body.desktop .hint{font-size:12.2px}
   }
 
   function persistArchive() {
+    var fb = fileBridge();
+    if (fb) {
+      var written = false;
+      try { written = fb.archiveWrite(JSON.stringify(archiveData)); } catch (e) { written = false; }
+      if (written === false) lastError = 'disk';
+      return;
+    }
     var before = ok;
     store(KEYS.archive, archiveData);
     if (before && !ok) lastError = 'quota';       /* хранилище браузера отказалось писать */
+  }
+
+  /* перенос архива из localStorage в файл при первом запуске десктоп-версии */
+  function migrateLocalStorageArchive() {
+    if (!fileBridge()) return 0;
+    if (archiveData.length) return 0;
+    var l = ls();
+    if (!l) return 0;
+    var raw = null;
+    try { raw = l.getItem(KEYS.archive); } catch (e) { return 0; }
+    if (!raw) return 0;
+    var old = null;
+    try { old = JSON.parse(raw); } catch (e) { return 0; }
+    if (!Array.isArray(old) || !old.length) return 0;
+    archiveData = old;
+    sizeById = {};
+    persistArchive();
+    try { l.removeItem(KEYS.archive); } catch (e) { }
+    return archiveData.length;
   }
   var lastError = null;
   function persistPlayers() { store(KEYS.players, playersData); }
@@ -1716,12 +1772,29 @@ body.desktop .hint{font-size:12.2px}
     if (!archiveData.length) return DEFAULT_GAME_BYTES;
     return Math.max(400, Math.round(archiveBytes() / archiveData.length));
   }
+  /* без ограничений: в десктопе архив лежит файлом на устройстве,
+     в браузере — если пользователь сам выключил лимит в настройках */
+  function isUnlimited() {
+    if (fileTransport()) return true;
+    return set.archiveUnlimited === true;
+  }
+
   function quotaInfo() {
     var used = archiveBytes();
     var avg = avgGameBytes();
+    if (isUnlimited()) {
+      return {
+        unlimited: true, used: used, limit: null, reserve: 0, total: null,
+        avg: avg, reserveGames: RESERVE_GAMES,
+        pct: null, pctOfTotal: null, free: null, freeGames: null,
+        games: archiveData.length, level: 0, overflow: false,
+        path: archiveFilePath()
+      };
+    }
     var reserve = avg * RESERVE_GAMES;
     var pct = ARCHIVE_BUDGET ? (used / ARCHIVE_BUDGET) * 100 : 0;
     return {
+      unlimited: false,
       used: used, limit: ARCHIVE_BUDGET, reserve: reserve, total: ARCHIVE_BUDGET + reserve,
       avg: avg, reserveGames: RESERVE_GAMES,
       pct: pct,                                     /* может превышать 100 — за счёт резерва */
@@ -1736,6 +1809,7 @@ body.desktop .hint{font-size:12.2px}
   /* освобождает место под новую партию: удаляет самые старые записи */
   function evictOldest(needBytes) {
     var evicted = [];
+    if (isUnlimited()) return evicted;      /* без лимита ничего не удаляем принудительно */
     var projected = archiveBytes() + needBytes;
     while (archiveData.length > 1) {
       var limit = ARCHIVE_BUDGET + avgGameBytes() * RESERVE_GAMES;
@@ -1910,6 +1984,8 @@ body.desktop .hint{font-size:12.2px}
     logs: logs, pushLog: pushLog, clearLogs: clearLogs,
     pgnAll: pgnAll, jsonAll: jsonAll,
     splitPgnGames: splitPgnGames, parseSanList: parseSanList, reload: reloadBlocks,
+    fileTransport: fileTransport, archiveFilePath: archiveFilePath,
+    migrateLocalStorageArchive: migrateLocalStorageArchive, isUnlimited: isUnlimited,
     ARCHIVE_BUDGET: ARCHIVE_BUDGET, RESERVE_GAMES: RESERVE_GAMES,
     avgGameBytes: avgGameBytes, quotaInfo: quotaInfo, evictOldest: evictOldest,
     available: function () { return ok; },
@@ -2950,8 +3026,8 @@ body.desktop .hint{font-size:12.2px}
   'use strict';
 
   /* версия прошивается сборщиком из version.json */
-  var APP_VERSION = '2.2';
-  var BUILD_STAMP = '2026-10-15';
+  var APP_VERSION = '2.3';
+  var BUILD_STAMP = '2026-10-20';
 
   var C = window.Chess;
   var Bot = window.ChessBot;
@@ -3224,8 +3300,13 @@ body.desktop .hint{font-size:12.2px}
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     endMarkDrag();
     if (!d) return;
-    if (!d.moved) { clearMarks(); return; }
-    if (to < 0) to = d.from;
+    if (!d.moved || to < 0 || to === d.from) {
+      /* правый клик без перетаскивания или внутри одной клетки — круг-пометка */
+      toggleMark({ type: 'circle', from: d.from, to: d.from });
+      sfx('mark');
+      renderMarks(); save();
+      return;
+    }
     toggleMark(to === d.from ? { type: 'circle', from: d.from, to: d.from } : { type: 'arrow', from: d.from, to: to });
     sfx('mark');
     renderMarks(); save();
@@ -3260,14 +3341,14 @@ body.desktop .hint{font-size:12.2px}
     taken.sort(function (a, b) { return PIECE_ORDER[C.typeOf(a)] - PIECE_ORDER[C.typeOf(b)]; });
     var isTurn = !G.result && cur().turn === side;
     var sideName = nameFor(side) || nom(side);   /* без имени — просто «Белые»/«Чёрные» */
-    var html = '<span class="who"><span class="dot"></span>' + esc(sideName) +
-      (diff > 0 ? '<span class="adv" title="Перевес в материале">+' + diff + '</span>' : '') + '</span><span class="pcs">';
+    var html = '<span class="who"><span class="dot"></span>' + esc(sideName) + '</span><span class="pcs">';
     /* взятые фигуры показываем серыми силуэтами без подложек */
     for (var i = 0; i < taken.length; i++) {
       var cc = C.colorOf(taken[i]) === 'w' ? 'cw' : 'cb';
       html += '<span class="chip ' + cc + '" title="Взята: ' + PIECE_RU[C.typeOf(taken[i])] + '">' + pieceHTML(taken[i], 'cap') + '</span>';
     }
-    html += '</span>';
+    html += '</span>' +
+      (diff > 0 ? '<span class="adv" title="Перевес в материале по фактической расстановке">+' + diff + ' по материалу</span>' : '');
     el.innerHTML = html;
     el.className = 'cap-row' + (isTurn ? ' turn-here' : '');
   }
@@ -3698,6 +3779,34 @@ body.desktop .hint{font-size:12.2px}
   }
   function renderQuota() {
     var q = S.quotaInfo();
+    var chkU = $('chkUnlimited');
+    if (chkU) {
+      chkU.checked = !!q.unlimited;
+      chkU.disabled = S.fileTransport();
+      chkU.parentNode.title = S.fileTransport()
+        ? 'В версии для компьютера архив хранится файлом на устройстве и не ограничен'
+        : 'В браузере отключать лимит рискованно: при переполнении localStorage новые партии могут не сохраниться';
+    }
+    if (q.unlimited) {
+      $('quotaPct').textContent = 'без лимита';
+      $('quotaPct').className = 'q-pct';
+      var fillU = $('quotaFill');
+      fillU.style.width = '100%';
+      fillU.className = 'qf qf-unlim';
+      $('quotaReserve').style.display = 'none';
+      $('quotaText').innerHTML = 'Занято <b>' + S.sizeLabel(q.used) + '</b> на устройстве · партий: ' + q.games +
+        (q.path ? '<br>Файл архива: <span style="word-break:break-all">' + esc(q.path) + '</span>'
+                : '<br>Ограничения размера нет: данные хранятся вне localStorage');
+      $('quotaHelp').innerHTML =
+        '<b>Режим без ограничений.</b> В версии для компьютера архив партий хранится обычным файлом ' +
+        '<b>archive.json</b> в папке данных приложения, а не в localStorage, поэтому квартильные предупреждения ' +
+        'и автоматическое удаление старых партий не применяются: партии накапливаются на устройстве, пока хватает диска. ' +
+        'Занятое место показано выше; средняя партия весит ' + S.sizeLabel(q.avg) + '.<br><br>' +
+        'Выгрузка в PGN остаётся полезной как резервная копия: кнопка «📦 Выгрузить…» скачивает файл, а архив можно ' +
+        'очистить вручную, если захочется освободить место.';
+      return;
+    }
+    $('quotaReserve').style.display = '';
     var pctEl = $('quotaPct');
     pctEl.textContent = q.pct.toFixed(q.pct < 10 ? 1 : 0) + '%';
     pctEl.className = 'q-pct' + (q.level ? ' lv' + q.level : '');
@@ -3847,6 +3956,7 @@ body.desktop .hint{font-size:12.2px}
   /* пороги 80/90/95/100 % и вытеснение самых старых партий, когда резерв кончился */
   function checkQuota(evicted) {
     var q = S.quotaInfo();
+    if (q.unlimited) return;                 /* архив на устройстве: предупреждений нет */
     var prev = S.settings().archiveWarnLevel || 0;
     if (q.level > prev) {
       S.setSetting('archiveWarnLevel', q.level);
@@ -3870,6 +3980,7 @@ body.desktop .hint{font-size:12.2px}
   }
 
   function maybeRemindOffload() {
+    if (S.isUnlimited()) return;
     var remind = parseInt(S.settings().archiveReminder, 10) || 30;
     var cnt = S.countGames();
     if (remind > 0 && cnt > 0 && cnt % remind === 0) {
@@ -4125,6 +4236,28 @@ body.desktop .hint{font-size:12.2px}
       toast(!on ? 'ПОЛНЫЙ ЭКРАН' : 'ОКОННЫЙ РЕЖИМ', 'info', 'F11 — переключить обратно');
     });
   }
+  var CHANGELOG = [
+    ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
+    ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
+    ['1.2', 'Разгрузка интерфейса: вкладки и панель иконок с подсказками; архив партий в PGN с названиями и именами; профили соперников со счётом и личными встречами; анонимы; импорт PGN с выбором учёта в статистике; выгрузка архива файлом.'],
+    ['1.3', 'Меню открывается иконкой в правом верхнем углу, доска на всё окно; исправлено смещение фигур влево; выделено место под архив: шкала с процентами, резерв на 3 партии, пороги 80/90/95/100 %, автоудаление самых старых; кнопки «Скопировать и перейти на Lichess».'],
+    ['2.0', 'Версия для компьютера: обёртки Electron и Tauri, иконки, PWA с офлайн-кэшем; слой платформ и движков; размечено место под Rodent IV (UCI, пресеты, установка сборки); ссылка Lichess исправлена с мёртвого /import на /paste.'],
+    ['2.1', 'Полноэкранный запуск без нативной панели меню; меню приложения «⋮»; перевес материала считается по доске (корректно с превращениями); статус партии во вкладке «Ходы» с автооткрытием при итоге; чип состояния в шапке; версионирование и проверка обновлений.'],
+    ['2.2', 'Панель управления переехала во вкладку «Ходы» двумя рядами; материал — колонка слева серыми силуэтами; меню-оверлей без сдвига доски; подсказки под кнопками без обрезания; автоповорот только для двух игроков; название окна Chess; приоритет Windows; конвейер релизов.'],
+    ['2.3', 'Архив в десктопе хранится файлом на устройстве без ограничений (и отключаемый лимит в браузере); перевес материала отдельной строкой под именем; «Отмена» в диалоге превращения по центру; стрелки: правый клик и тяга в клетке рисуют круг, повтор удаляет пометку, короткий левый клик или ход стирают всё; убран подзаголовок под логотипом; убраны лишние полосы прокрутки в панели; «История изменений» в меню приложения; релизы и тесты только под Windows.'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; автообновления через GitHub Actions после привязки репозитория; NNUE-движок в браузере/десктопе.'],
+  ];
+  function showChangelog() {
+    var html = '<h2>История изменений</h2><div class="rules-body">';
+    CHANGELOG.forEach(function (row) {
+      html += '<h3>Версия ' + esc(row[0]) + '</h3><p>' + esc(row[1]) + '</p>';
+    });
+    html += '</div><div class="btns" style="margin-top:12px"><button class="btn primary wide" data-a="close">Закрыть</button></div>';
+    var box = openModal(html, false, null);
+    box.classList.add('wide');
+    box.querySelector('[data-a=close]').onclick = function () { closeModal(); };
+  }
+
   function showAbout() {
     var i = P.info();
     var q = S.quotaInfo();
@@ -4439,7 +4572,11 @@ body.desktop .hint{font-size:12.2px}
     if (!drag) return;
     var from = drag.from, moved = drag.moved;
     endDrag();
-    if (!moved) return;
+    if (!moved) {
+      /* короткое нажатие левой кнопки стирает все стрелки и круги */
+      if (G.marks.length) clearMarks(true);
+      return;
+    }
     if (!canPlay()) { render(); return; }
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     if (to < 0 || to === from) { render(); return; }
@@ -5082,6 +5219,7 @@ body.desktop .hint{font-size:12.2px}
       else if (a === 'pgn') { openPanel('position'); $('btnCopyPgn').click(); }
       else if (a === 'lichess') openLichess(pgnFor({}), null);
       else if (a === 'help') showHelp();
+      else if (a === 'changelog') showChangelog();
       else if (a === 'updates') checkUpdates();
       else if (a === 'about') showAbout();
     });
@@ -5112,6 +5250,13 @@ body.desktop .hint{font-size:12.2px}
     };
 
     /* архив */
+    $('chkUnlimited').onchange = function () {
+      S.setSetting('archiveUnlimited', $('chkUnlimited').checked);
+      addLog($('chkUnlimited').checked
+        ? 'Ограничение размера архива отключено в настройках.'
+        : 'Ограничение размера архива включено снова: ' + S.sizeLabel(S.ARCHIVE_BUDGET) + ' + резерв.', 'arch');
+      render();
+    };
     $('archSearch').addEventListener('input', function () { renderArchive(); });
     $('btnSaveGame').onclick = function () {
       if (!G.sans.length) { toast('Партия пуста', 'info', 'сделайте хотя бы один ход'); return; }
@@ -5400,6 +5545,9 @@ body.desktop .hint{font-size:12.2px}
 
   function init() {
     S.reload();                 /* перечитываем хранилище (важно при загрузке страницы) */
+    var moved = S.migrateLocalStorageArchive();
+    if (moved) addLog('Архив партий (' + moved + ' ' + plural(moved, 'партия', 'партии', 'партий') +
+      ') перенесён из localStorage в файл на устройстве: ограничения браузера больше не действуют.', 'arch');
     document.body.classList.toggle('desktop', P.isDesktop());
     E.on('info', function (d) {
       pushEngineLog('info depth ' + (d.depth || '?') + (d.score !== undefined ? ' score ' + d.score : '') +
@@ -5454,6 +5602,7 @@ body.desktop .hint{font-size:12.2px}
       return 'https://lichess.org/analysis/' + encodeURIComponent(C.toFen(cur())).replace(/%20/g, '_').replace(/%2F/g, '/');
     },
     openLichess: openLichess, checkQuota: checkQuota, renderQuota: renderQuota,
+    showChangelog: showChangelog, CHANGELOG: CHANGELOG,
     toggleAppMenu: toggleAppMenu, appMenuOpen: appMenuOpen, toggleFullscreen: toggleFullscreen,
     showAbout: showAbout, checkUpdates: checkUpdates,
     version: function () {

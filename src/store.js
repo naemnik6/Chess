@@ -66,8 +66,32 @@
   var set = {};
 
   var archiveData, playersData, logData, gameData;
+  /* ---------- архив файлом на устройстве (десктоп) ----------
+     Обёртка предоставляет синхронный мост archiveRead/archiveWrite: архив
+     хранится обычным файлом в userData, без браузерных квот localStorage. */
+  function fileBridge() {
+    try {
+      var b = (typeof window !== 'undefined' && window.Chesster) || null;
+      return b && typeof b.archiveRead === 'function' && typeof b.archiveWrite === 'function' ? b : null;
+    } catch (e) { return null; }
+  }
+  function fileTransport() { return !!fileBridge(); }
+  function archiveFilePath() {
+    var b = fileBridge();
+    try { return b && typeof b.archivePath === 'function' ? b.archivePath() : null; } catch (e) { return null; }
+  }
+
   function reloadBlocks() {
-    archiveData = load(KEYS.archive, []);
+    var fb = fileBridge();
+    if (fb) {
+      var raw = null;
+      try { raw = fb.archiveRead(); } catch (e) { raw = null; }
+      var parsed = null;
+      try { parsed = raw ? JSON.parse(raw) : null; } catch (e) { parsed = null; }
+      archiveData = Array.isArray(parsed) ? parsed : [];
+    } else {
+      archiveData = load(KEYS.archive, []);
+    }
     if (!Array.isArray(archiveData)) archiveData = [];
     sizeById = {};
     playersData = load(KEYS.players, {});
@@ -157,9 +181,35 @@
   }
 
   function persistArchive() {
+    var fb = fileBridge();
+    if (fb) {
+      var written = false;
+      try { written = fb.archiveWrite(JSON.stringify(archiveData)); } catch (e) { written = false; }
+      if (written === false) lastError = 'disk';
+      return;
+    }
     var before = ok;
     store(KEYS.archive, archiveData);
     if (before && !ok) lastError = 'quota';       /* хранилище браузера отказалось писать */
+  }
+
+  /* перенос архива из localStorage в файл при первом запуске десктоп-версии */
+  function migrateLocalStorageArchive() {
+    if (!fileBridge()) return 0;
+    if (archiveData.length) return 0;
+    var l = ls();
+    if (!l) return 0;
+    var raw = null;
+    try { raw = l.getItem(KEYS.archive); } catch (e) { return 0; }
+    if (!raw) return 0;
+    var old = null;
+    try { old = JSON.parse(raw); } catch (e) { return 0; }
+    if (!Array.isArray(old) || !old.length) return 0;
+    archiveData = old;
+    sizeById = {};
+    persistArchive();
+    try { l.removeItem(KEYS.archive); } catch (e) { }
+    return archiveData.length;
   }
   var lastError = null;
   function persistPlayers() { store(KEYS.players, playersData); }
@@ -280,12 +330,29 @@
     if (!archiveData.length) return DEFAULT_GAME_BYTES;
     return Math.max(400, Math.round(archiveBytes() / archiveData.length));
   }
+  /* без ограничений: в десктопе архив лежит файлом на устройстве,
+     в браузере — если пользователь сам выключил лимит в настройках */
+  function isUnlimited() {
+    if (fileTransport()) return true;
+    return set.archiveUnlimited === true;
+  }
+
   function quotaInfo() {
     var used = archiveBytes();
     var avg = avgGameBytes();
+    if (isUnlimited()) {
+      return {
+        unlimited: true, used: used, limit: null, reserve: 0, total: null,
+        avg: avg, reserveGames: RESERVE_GAMES,
+        pct: null, pctOfTotal: null, free: null, freeGames: null,
+        games: archiveData.length, level: 0, overflow: false,
+        path: archiveFilePath()
+      };
+    }
     var reserve = avg * RESERVE_GAMES;
     var pct = ARCHIVE_BUDGET ? (used / ARCHIVE_BUDGET) * 100 : 0;
     return {
+      unlimited: false,
       used: used, limit: ARCHIVE_BUDGET, reserve: reserve, total: ARCHIVE_BUDGET + reserve,
       avg: avg, reserveGames: RESERVE_GAMES,
       pct: pct,                                     /* может превышать 100 — за счёт резерва */
@@ -300,6 +367,7 @@
   /* освобождает место под новую партию: удаляет самые старые записи */
   function evictOldest(needBytes) {
     var evicted = [];
+    if (isUnlimited()) return evicted;      /* без лимита ничего не удаляем принудительно */
     var projected = archiveBytes() + needBytes;
     while (archiveData.length > 1) {
       var limit = ARCHIVE_BUDGET + avgGameBytes() * RESERVE_GAMES;
@@ -474,6 +542,8 @@
     logs: logs, pushLog: pushLog, clearLogs: clearLogs,
     pgnAll: pgnAll, jsonAll: jsonAll,
     splitPgnGames: splitPgnGames, parseSanList: parseSanList, reload: reloadBlocks,
+    fileTransport: fileTransport, archiveFilePath: archiveFilePath,
+    migrateLocalStorageArchive: migrateLocalStorageArchive, isUnlimited: isUnlimited,
     ARCHIVE_BUDGET: ARCHIVE_BUDGET, RESERVE_GAMES: RESERVE_GAMES,
     avgGameBytes: avgGameBytes, quotaInfo: quotaInfo, evictOldest: evictOldest,
     available: function () { return ok; },

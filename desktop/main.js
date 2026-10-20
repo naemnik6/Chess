@@ -152,6 +152,24 @@ function buildMenu() {
   }
 }
 
+/* ---------- IPC: архив партий файлом на устройстве ----------
+   В десктоп-версии архив живёт не в localStorage (там ограничения браузера),
+   а обычным файлом archive.json в userData: место практически не ограничено,
+   партии хранятся на устройстве пользователя. */
+const archiveFile = () => path.join(app.getPath('userData'), 'archive.json');
+ipcMain.on('store:readArchive', (e) => {
+  try {
+    e.returnValue = fs.existsSync(archiveFile()) ? fs.readFileSync(archiveFile(), 'utf8') : null;
+  } catch (err) { e.returnValue = null; }
+});
+ipcMain.on('store:writeArchive', (e, text) => {
+  try {
+    fs.writeFileSync(archiveFile(), String(text), 'utf8');
+    e.returnValue = true;
+  } catch (err) { e.returnValue = false; }
+});
+ipcMain.on('store:archivePath', (e) => { e.returnValue = archiveFile(); });
+
 /* ---------- IPC: версия ---------- */
 ipcMain.on('app:version', (event) => { event.returnValue = APP_VERSION; });
 

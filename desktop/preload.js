@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('Chesster', {
     ipcRenderer.on('engine:error', (_e, msg) => cb(msg));
   },
 
+  /* архив партий файлом на устройстве (десктоп) */
+  archiveRead: () => ipcRenderer.sendSync('store:readArchive'),
+  archiveWrite: (text) => ipcRenderer.sendSync('store:writeArchive', text),
+  archivePath: () => ipcRenderer.sendSync('store:archivePath'),
+
   /* меню приложения и обновления */
   onMenu: (name, cb) => ipcRenderer.on('menu:' + name, () => cb()),
   checkUpdates: () => ipcRenderer.invoke('app:checkUpdates'),

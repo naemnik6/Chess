@@ -26,7 +26,6 @@
       <div class="mark"><svg viewBox="0 0 45 45" aria-hidden="true"><use href="#pc-wN"/></svg></div>
       <div>
         <h1>Chess</h1>
-        <div class="sub">Полные правила · игра за обе стороны · архив партий</div>
       </div>
       <span class="head-status" id="headStatus" title="Текущее состояние партии">Ход белых</span>
     </div>
@@ -74,6 +73,7 @@
           <div class="pop-title">Справка</div>
           <div class="am-grid">
             <button data-am="help" role="menuitem">Правила и объявления</button>
+            <button data-am="changelog" role="menuitem">История изменений</button>
             <button data-am="updates" role="menuitem">Проверить обновления</button>
             <button data-am="about" role="menuitem">О программе</button>
           </div>
@@ -185,6 +185,7 @@
               <span class="qres" id="quotaReserve" title="Здесь начинается резерв на 3 партии"></span>
             </div>
             <div class="hint" id="quotaText"></div>
+            <label class="chk"><input type="checkbox" id="chkUnlimited"> Хранить архив без ограничения размера</label>
             <details class="quota-help">
               <summary>Сколько это партий и что будет при заполнении</summary>
               <div class="hint" id="quotaHelp"></div>

@@ -82,8 +82,13 @@ setTimeout(() => {
   ok(G.marks.filter(m => m.type === 'circle')[0].from === C.sqFromName('c4'), 'круг стоит на c4');
   ok(/<circle/.test(layer()), 'круг отрисован в слое');
 
+  rightClick('c4');
+  ok(G.marks.filter(m => m.type === 'circle').length === 0, 'повторный короткий правый клик удалил именно этот круг');
+  ok(G.marks.length === 1, 'остальные пометки повтор не тронул');
   rightClick('a1');
-  ok(G.marks.length === 0 && layer() === '', 'короткий правый клик стирает все пометки');
+  ok(G.marks.length === 2, 'короткий правый клик на новой клетке рисует свой круг, а не стирает всё');
+  pev('pointerdown', sqEl('h1'), 5, 5, 0); pev('pointerup', win, 5, 5, 0);
+  ok(G.marks.length === 0 && layer() === '', 'короткий ЛЕВЫЙ клик стирает все пометки');
   rightDrag('g1', 'f3');
   ok(G.marks.length === 1, 'стрелка снова нарисована');
   ok(marksBtn().disabled === false, 'кнопка очистки стала активной');

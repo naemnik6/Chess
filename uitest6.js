@@ -83,8 +83,7 @@ win.open = u => { openedUrl = u; return { focus() { } }; };
   ok(row2 && ['undo', 'reset', 'flip', 'marks', 'draw', 'resign'].every(a => row2.querySelector('[data-act=' + a + ']')),
     'второй ряд: вернуть ход, сброс, переворот, стрелки, ничья, сдача');
   ok(q('.board-area > .cap-col') !== null, 'материал вынесен в колонку слева от доски');
-  ok(/@media \(max-height:840px\)\{ \.sub\{display:none\}/.test(css),
-    'на невысоких окнах подпись шапки скрывается ради размера доски');
+  ok(doc.querySelector('.logo .sub') === null, 'лишний подзаголовок под логотипом убран');
   ok(css.indexOf('.panel{position:absolute') >= 0 && !/\.panel\{width:376px/.test(css), 'панель больше не занимает 376 px в потоке рядом с доской');
   ok(/\.drawer-bg\{[^}]*pointer-events:none/.test(css), 'меню — оверлей: доска под ним не двигается');
   ok(/\.moves-status\{/.test(css) && !/\.statusbar\{/.test(css), 'статус переехал во вкладку «Ходы» (карточка .moves-status)');
