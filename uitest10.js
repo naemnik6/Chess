@@ -32,7 +32,7 @@ function boot(opts) {
       };
       if (opts.desktop) {
         win.Chesster = {
-          appVersion: '2.3', platform: 'electron',
+          appVersion: '2.3.1', platform: 'electron',
           openExternal: () => Promise.resolve(true),
           saveFile: () => Promise.resolve({ saved: true, path: '/x' }),
           pickEngine: () => Promise.resolve({ canceled: true }),
@@ -43,7 +43,8 @@ function boot(opts) {
           appReady: () => Promise.resolve(true),
           setFullscreen: on => calls.fullscreen.push(!!on),
           isFullscreen: () => Promise.resolve(false),
-          checkUpdates: () => Promise.resolve(true),
+          checkUpdates: () => Promise.resolve({ ok: true, reason: 'up-to-date', message: 'У вас последняя версия.' }),
+          onUpdaterEvent: () => { }, updateInfo: () => Promise.resolve({ version: '2.3.1', state: 'idle' }),
           archiveRead: () => fileStore,
           archiveWrite: t => { calls.writes.push(t); fileStore = t; return true; },
           archivePath: () => 'C:\\Users\\tester\\AppData\\Roaming\\Chess\\archive.json'
@@ -162,13 +163,17 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/tags: \['v\*'\]/.test(yml) && /workflow_dispatch/.test(yml), 'релиз запускается тегом v* или вручную');
   ok(/node build\.js\n\s+node test\.js/.test(yml), 'в контуре CI сборка и тесты правил');
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
-  ok(/git add \./.test(bat) && /git commit -m "Обновление до версии 2\.3\.0"/.test(bat), 'bat делает коммит с номером версии');
-  ok(/git tag v2\.3\.0 && git push origin v2\.3\.0/.test(bat), 'bat ставит и пушит тег v2.3.0');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8'));
-  ok(pkg.version === '2.3.0', 'версия обёртки 2.3.0');
+  const PV = pkg.version;                                  /* версия установщика, напр. 2.3.1 */
+  const VJ = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).version;
+  ok(/git add \./.test(bat) && bat.indexOf('git commit -m "Обновление до версии ' + PV + '"') >= 0,
+    'bat делает коммит с номером версии ' + PV);
+  ok(bat.indexOf('git tag v' + PV + ' && git push origin v' + PV) >= 0, 'bat ставит и пушит тег v' + PV);
+  ok(PV === (VJ.split('.').length === 2 ? VJ + '.0' : VJ), 'версия обёртки ' + PV + ' синхронна с version.json ' + VJ);
   ok(!pkg.build.linux && !pkg.build.mac, 'конфигурации linux и mac из сборки убраны');
   ok(!pkg.scripts['dist:linux'] && !pkg.scripts['dist:mac'], 'скриптов dist:linux / dist:mac больше нет');
-  ok(JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).version === '2.3', 'version.json = 2.3');
+  ok(new RegExp('^' + VJ.replace(/\./g, '\\.')).test(String(html.match(/var APP_VERSION = '([^']+)'/)[1])),
+    'version.json = ' + VJ + ' и прошит в index.html');
 
   console.log(`\nИТОГ: ${pass} пройдено, ${fail} провалено`);
   process.exit(fail ? 1 : 0);

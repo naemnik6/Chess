@@ -1225,7 +1225,8 @@
     ['2.1', 'Полноэкранный запуск без нативной панели меню; меню приложения «⋮»; перевес материала считается по доске (корректно с превращениями); статус партии во вкладке «Ходы» с автооткрытием при итоге; чип состояния в шапке; версионирование и проверка обновлений.'],
     ['2.2', 'Панель управления переехала во вкладку «Ходы» двумя рядами; материал — колонка слева серыми силуэтами; меню-оверлей без сдвига доски; подсказки под кнопками без обрезания; автоповорот только для двух игроков; название окна Chess; приоритет Windows; конвейер релизов.'],
     ['2.3', 'Архив в десктопе хранится файлом на устройстве без ограничений (и отключаемый лимит в браузере); перевес материала отдельной строкой под именем; «Отмена» в диалоге превращения по центру; стрелки: правый клик и тяга в клетке рисуют круг, повтор удаляет пометку, короткий левый клик или ход стирают всё; убран подзаголовок под логотипом; убраны лишние полосы прокрутки в панели; «История изменений» в меню приложения; релизы и тесты только под Windows.'],
-    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; автообновления через GitHub Actions после привязки репозитория; NNUE-движок в браузере/десктопе.'],
+    ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе.'],
   ];
   function showChangelog() {
     var html = '<h2>История изменений</h2><div class="rules-body">';
@@ -1241,34 +1242,89 @@
   function showAbout() {
     var i = P.info();
     var q = S.quotaInfo();
+    /* в режиме «без ограничений» (десктоп-файл или снятый лимит браузера)
+       quotaInfo возвращает limit/pct = null — учитываем это, иначе toFixed(null)
+       ронял окно «О программе» в десктопе */
+    var quotaLine = q.unlimited
+      ? 'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) +
+        ' — без ограничений' + (q.path ? ' (файл ' + esc(q.path) + ')' : '') + '.'
+      : 'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) +
+        ' из ' + S.sizeLabel(q.limit) + ' (' + (typeof q.pct === 'number' ? q.pct : 0).toFixed(0) + '%).';
     openModal('<h2>О программе</h2>' +
       '<p><b>Шахматы, версия ' + esc(APP_VERSION) + '</b>' + (BUILD_STAMP ? ' (сборка ' + esc(BUILD_STAMP) + ')' : '') + '<br>' +
       'Режим запуска: ' + esc(i.desktop ? 'приложение на компьютере (' + i.env + ')' : 'браузер') +
       (i.desktop && i.appVersion ? ', обёртка ' + esc(i.appVersion) : '') + '.<br>' +
-      'Партий в архиве: ' + S.countGames() + ' · занято архивом ' + S.sizeLabel(q.used) + ' из ' + S.sizeLabel(q.limit) +
-      ' (' + q.pct.toFixed(0) + '%).<br>Всего данных в хранилище: ' + esc(S.usageLabel()) + '.</p>' +
+      quotaLine + '<br>Всего данных в хранилище: ' + esc(S.usageLabel()) + '.</p>' +
       '<p>Полные правила шахмат, игра за обе стороны, компьютер, архив партий в PGN, профили соперников, ' +
       'стрелки разбора и место под внешние движки (Rodent IV). Один файл, работает без интернета.</p>' +
       '<div class="btns"><button class="btn" data-a="updates">Проверить обновления</button>' +
+      '<button class="btn" data-a="manual">⬇ Скачать обновление вручную</button>' +
       '<button class="btn primary" data-a="close">Закрыть</button></div>')
       .querySelector('[data-a=close]').onclick = function () { closeModal(); };
     var ub = document.querySelector('.modal [data-a=updates]');
     if (ub) ub.onclick = function () { closeModal(); checkUpdates(); };
+    var mb = document.querySelector('.modal [data-a=manual]');
+    if (mb) mb.onclick = function () { closeModal(); openReleases(); };
+  }
+  /* страница релизов GitHub — резервный путь обновления: приложение без
+     цифровой подписи, и Windows может блокировать автоустановку */
+  var RELEASES_URL = 'https://github.com/naemnik6/Chess/releases/latest';
+  function openReleases() { P.openExternal(RELEASES_URL); }
+  function showUpdateResult(res) {
+    res = res || {};
+    var ok = !!res.ok;
+    var head = ok ? (res.reason === 'up-to-date' ? 'Обновлений нет' : 'Обновление') : 'Проверить обновления не удалось';
+    var diagText = '';
+    if (!ok && res.diag) {
+      var d = res.diag;
+      diagText = '<div class="hint" style="margin:8px 0;white-space:pre-wrap;font-size:12px">' +
+        'Диагностика: приложение упаковано — ' + (d.packaged ? 'да' : 'нет (dev-запуск)') +
+        ' · electron-updater — ' + (d.updaterLoaded ? 'подключён' : 'НЕ подключён' + (d.updaterLoadError ? ': ' + esc(d.updaterLoadError) : '')) +
+        ' · app-update.yml — ' + (d.appUpdateYmlExists ? 'на месте' : 'НЕТ (' + esc(d.appUpdateYmlPath || '?') + ')') +
+        (d.lastError ? '\nПоследняя ошибка: ' + esc(d.lastError) : '') + '</div>';
+    }
+    var box = openModal('<h2>' + esc(head) + '</h2>' +
+      '<p>' + esc(res.message || 'Обёртка не вернула подробностей.') + '</p>' + diagText +
+      '<div class="btns">' +
+      (ok ? '' : '<button class="btn" data-a="manual">⬇ Скачать обновление вручную</button>') +
+      '<button class="btn primary" data-a="close">' + (ok ? 'Понятно' : 'Закрыть') + '</button></div>');
+    box.querySelector('[data-a=close]').onclick = function () { closeModal(); };
+    var mb = box.querySelector('[data-a=manual]');
+    if (mb) mb.onclick = function () { closeModal(); openReleases(); };
   }
   function checkUpdates() {
     var b = P.bridge();
     if (b && typeof b.checkUpdates === 'function') {
-      b.checkUpdates();
-      toast('ПРОВЕРКА ОБНОВЛЕНИЙ', 'info', 'обёртка выполнит её и покажет результат');
+      toast('ПРОВЕРКА ОБНОВЛЕНИЙ', 'info', 'запрашиваем GitHub…');
+      Promise.resolve(b.checkUpdates()).then(function (res) {
+        if (res && typeof res === 'object' && res.message !== undefined) {
+          if (res.ok) {
+            /* успех — лёгкий тост: последняя версия / найдена / уже скачана */
+            if (res.reason === 'up-to-date') toast('ОБНОВЛЕНИЙ НЕТ', 'info', res.message);
+            else if (res.reason === 'available') toast('НАЙДЕНО ОБНОВЛЕНИЕ', 'info', res.message);
+            else toast('ОБНОВЛЕНИЕ ГОТОВО', 'arch', res.message);
+          } else {
+            showUpdateResult(res);   /* конкретная ошибка + диагностика + ручное скачивание */
+          }
+        } else {
+          showUpdateResult({ ok: false, reason: 'legacy', diag: null, message: 'Обёртка старой версии не вернула результат проверки. Скачайте обновление вручную со страницы релизов.' });
+        }
+      }).catch(function (err) {
+        showUpdateResult({ ok: false, reason: 'ipc', diag: null, message: 'Обёртка не ответила на запрос: ' + (err && err.message || err) + '.' });
+      });
       return;
     }
     openModal('<h2>Обновления</h2><p>Текущая версия: <b>' + esc(APP_VERSION) + '</b>' +
       (BUILD_STAMP ? ' (сборка ' + esc(BUILD_STAMP) + ')' : '') + '.</p>' +
       '<div class="hint" style="margin-bottom:10px">Браузер и PWA получают новую версию сами: сервис-воркер ' +
-      'заменит кэш и предложит обновиться при следующем открытии. На компьютере обновления ставит ' +
-      'установщик новой версии — данные (архив, профили, настройки) сохраняются.</div>' +
-      '<div class="btns"><button class="btn primary wide" data-a="close">Понятно</button></div>')
+      'заменит кэш и предложит обновиться при следующем открытии. Приложение на компьютере проверяет ' +
+      'обновления на GitHub при каждом запуске; если автоустановка блокируется системой — скачайте ' +
+      'новый установщик вручную, данные (архив, профили, настройки) сохранятся.</div>' +
+      '<div class="btns"><button class="btn" data-a="manual">⬇ Скачать обновление вручную</button>' +
+      '<button class="btn primary" data-a="close">Понятно</button></div>')
       .querySelector('[data-a=close]').onclick = function () { closeModal(); };
+    var mb2 = document.querySelector('.modal [data-a=manual]');
+    if (mb2) mb2.onclick = function () { closeModal(); openReleases(); };
   }
 
   /* ============================ ВЫДВИЖНОЕ МЕНЮ ============================ */
@@ -1490,9 +1546,21 @@
     if (G.modal) return;
     if (e.button === 2) { startMarkDrag(e, sq); return; }
     if (e.button) return;
-    if (!canPlay()) { flashLocked(); return; }
     var s = cur();
-    if (G.selected !== null && hasMove(G.selected, sq)) {
+    var pc = s.b[sq];
+    var playable = canPlay();
+    var willMove = playable && G.selected !== null && hasMove(G.selected, sq);
+    var willDrag = playable && !willMove && pc && C.colorOf(pc) === s.turn;
+    /* Короткий левый клик, который не ведёт к ходу и не подхватывает фигуру
+       (пустая клетка, чужая фигура, просмотр истории, оконченная партия),
+       стирает все стрелки и круги. Если фигура подхвачена — решение примет
+       onDragUp на отпускании: перетаскивание = ход, короткое нажатие = стирание. */
+    if (!willMove && !willDrag && G.marks.length) {
+      clearMarks(true);
+      if (!playable) return;   /* клик уже сделал дело — не «ругаемся» на блокировку */
+    }
+    if (!playable) { flashLocked(); return; }
+    if (willMove) {
       if (e.preventDefault) e.preventDefault();
       var from = G.selected;
       var promo = isPromotion(from, sq);
@@ -1502,8 +1570,7 @@
       render();
       return;
     }
-    var pc = s.b[sq];
-    if (pc && C.colorOf(pc) === s.turn) {
+    if (willDrag) {
       if (e.preventDefault) e.preventDefault();
       select(sq);
       startDrag(e, sq, pc, el);
@@ -1779,7 +1846,7 @@
     '<li><b>Недостаточно материала</b> — мат невозможен в принципе.</li>' +
     '<li><b>По соглашению</b> — кнопка ½ под доской.</li>' +
     '<li><b>Сдача</b> — кнопка ⚑ под доской: поражение стороны, чей ход.</li></ul>' +
-    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг. Короткий правый клик стирает всё (то же делает кнопка ➶).</p>' +
+    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
     '<h3>Архив партий</h3><p>После завершения партии предлагается сохранить её в архив: можно задать название и имена игроков. Сохранённую партию можно воспроизвести на доске, посмотреть её PGN, переименовать или удалить. Имена складываются в профили: сыграно, победы, ничьи, поражения, процент очков, маты, сдачи, личные встречи.</p>' +
     '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать анонимные партии в статистике» на вкладке «Профили» разрешает или запрещает такой учёт, а кнопка «Очистить анонима» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
     '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается на вкладке «Игра».</p>' +
@@ -2523,6 +2590,22 @@
     P.onMenu('help', showHelp);
   }
 
+  /* События обновлений из обёртки: каждый этап (checking-for-update,
+     update-available, update-not-available, download-progress, update-downloaded,
+     error, …) пишется в консоль DevTools (Ctrl+Shift+I), а ключевые этапы
+     дополнительно показываются тостом над доской. */
+  function bindUpdaterEvents() {
+    var b = P.bridge();
+    if (!b || typeof b.onUpdaterEvent !== 'function') return;
+    b.onUpdaterEvent(function (ev) {
+      if (!ev || !ev.stage) return;
+      console.log('[updater] ' + ev.stage + (ev.details ? ' — ' + ev.details : '') + ' (состояние: ' + ev.state + ')');
+      if (ev.stage === 'update-available') toast('НАЙДЕНО ОБНОВЛЕНИЕ', 'info', ev.details || 'скачиваем в фоне');
+      else if (ev.stage === 'update-downloaded') toast('ОБНОВЛЕНИЕ ГОТОВО', 'arch', 'установится при перезапуске приложения');
+      else if (ev.stage === 'error') toast('ОБНОВЛЕНИЕ — ОШИБКА', 'check', ev.details || 'подробности в консоли DevTools');
+    });
+  }
+
   function init() {
     S.reload();                 /* перечитываем хранилище (важно при загрузке страницы) */
     var moved = S.migrateLocalStorageArchive();
@@ -2543,6 +2626,7 @@
     P.notifyReady();
     registerServiceWorker();
     bindDesktopMenu();
+    bindUpdaterEvents();
     bind();
     var restored = restore();
     if (!restored) {

@@ -32,7 +32,7 @@ function boot(withBridge) {
           appReady: () => Promise.resolve(true),
           setFullscreen: on => { calls.fullscreen.push(!!on); },
           isFullscreen: () => Promise.resolve(calls.fullscreen[calls.fullscreen.length - 1] === true),
-          checkUpdates: () => { calls.updates++; return Promise.resolve(true); }
+          checkUpdates: () => { calls.updates++; return Promise.resolve({ ok: true, reason: 'up-to-date', message: 'У вас последняя версия.' }); }
         };
       }
       win.URL.createObjectURL = () => 'blob:x';
@@ -62,7 +62,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const V = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).version;
   console.log('\n— Версия ' + V + ' —');
   ok(App.version().app === V, 'приложение отражает версию ' + V + ': ' + App.version().app);
-  ok(JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8')).version === V + '.0', 'обёртка синхронна: ' + V + '.0');
+  const PV = V.split('.').length === 2 ? V + '.0' : V;   /* «2.3» ↔ «2.3.0», «2.3.1» ↔ «2.3.1» */
+  ok(JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8')).version === PV, 'обёртка синхронна: ' + PV);
   App.openPanel('game');
   ok(new RegExp('Версия приложения: ' + V.replace('.', '\\.')).test(txt('versionLine')), 'версия видна на вкладке «Игра»: ' + txt('versionLine').slice(0, 40));
 

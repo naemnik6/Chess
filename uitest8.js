@@ -44,7 +44,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   console.log('\n— Маркировка версии —');
   const ver = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8'));
   const V = ver.version;
-  ok(/^\d+\.\d+$/.test(V), 'version.json — единый источник версии: ' + V);
+  ok(/^\d+\.\d+(\.\d+)?$/.test(V), 'version.json — единый источник версии: ' + V);
   ok(new RegExp("var APP_VERSION = ['\"]" + V.replace('.', '\\.') + "['\"]").test(html), 'версия прошита в собранный index.html');
   ok(/var BUILD_STAMP = ['"]\d{4}-\d{2}-\d{2}['"]/.test(html), 'дата сборки прошита: ' + (html.match(/var BUILD_STAMP = ['"]([^'"]+)['"]/) || [])[1]);
 
@@ -141,13 +141,15 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(found && found.missing && found.missing.length >= 6, 'при отсутствии файла возвращается список проверенных путей для диалога');
 
   console.log('\n— Обновления —');
-  ok(/function checkForUpdates\(\)/.test(main) && /electron-updater/.test(main),
-    'в обёртке есть проверка обновлений через electron-updater (если он настроен)');
+  ok(/async function runUpdateCheck\(/.test(main) && /electron-updater/.test(main),
+    'в обёртке есть проверка обновлений через electron-updater (runUpdateCheck)');
   ok(/data-am="updates"/.test(html) && /app:checkUpdates/.test(main), 'проверка обновлений доступна из меню приложения и через IPC обёртки');
   ok(/quitAndInstall/.test(main), 'скачанное обновление ставится перезапуском');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop', 'package.json'), 'utf8'));
-  ok(pkg.version === V + '.0', 'версия обёртки синхронизирована: ' + pkg.version);
-  ok(pkg.devDependencies['electron-updater'] !== undefined, 'electron-updater в зависимостях');
+  const V3 = V.split('.').length === 2 ? V + '.0' : V;   /* version.json «2.3» ↔ установщик «2.3.0» */
+  ok(pkg.version === V3, 'версия обёртки синхронизирована: ' + pkg.version + ' = ' + V3);
+  ok((pkg.dependencies || {})['electron-updater'] !== undefined && !(pkg.devDependencies || {})['electron-updater'],
+    'electron-updater в dependencies (production) — иначе он не попадает в сборку');
   ok(pkg.build.publish && pkg.build.publish.provider === 'github', 'заготовка источника обновлений (github) в конфиге сборки');
   ok(pkg.build.extraResources.some(r => String(r.from).indexOf('version.json') >= 0), 'version.json упаковывается в ресурсы');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');

@@ -22,7 +22,7 @@ let engineChild = null;
 /* ---------- версия приложения ----------
    Единый источник — version.json в корне проекта; в упакованном виде он
    приезжает в resources/app/version.json. Если файла нет — запасная константа. */
-const FALLBACK_VERSION = '2.0';
+const FALLBACK_VERSION = '2.3.1';
 function readAppVersion() {
   const candidates = [
     process.resourcesPath && path.join(process.resourcesPath, 'app', 'version.json'),
@@ -264,46 +264,251 @@ ipcMain.handle('engine:pick', async () => {
   return { canceled, path: canceled ? null : filePaths[0] };
 });
 
-/* ---------- обновления ----------
-   Три канала, по среде:
-     • браузер  — обычная перезагрузка страницы;
-     • PWA      — сервис-воркер кэширует новую версию по имени кэша (version.json)
-                  и сам предложит обновиться при следующем открытии;
-     • десктоп  — electron-updater, если он установлен и в build.publish указан
-                  источник (GitHub и т.п.). Без настроенного источника показываем
-                  текущую версию и подсказку. */
-function checkForUpdates() {
-  let updater = null;
-  try { updater = require('electron-updater').autoUpdater; } catch (e) { updater = null; }
-  if (!updater) {
-    dialog.showMessageBox(win, {
-      type: 'info', title: 'Обновления',
-      message: 'Шахматы ' + APP_VERSION,
-      detail: 'Автообновление не настроено в этой сборке.\n\n' +
-        '• Десктоп: соберите новую версию командой npm run dist:win и установите поверх — ' +
-        'данные (архив партий, профили, настройки) хранятся отдельно и сохранятся.\n' +
-        '• Веб/PWA: новая версия применяется сервис-воркером автоматически при следующем открытии.\n\n' +
-        'Чтобы включить автообновление, добавьте electron-updater и блок build.publish ' +
-        '(см. desktop/README.md, раздел «Обновления»).'
-    });
-    return;
-  }
-  updater.once('update-available', () => dialog.showMessageBox(win, {
-    type: 'info', title: 'Обновление', message: 'Доступна новая версия — скачиваем…'
-  }));
-  updater.once('update-downloaded', () => {
-    dialog.showMessageBox(win, {
-      type: 'question', title: 'Обновление готово',
-      message: 'Новая версия скачана. Перезапустить сейчас?', buttons: ['Перезапустить', 'Позже']
-    }).then(({ response }) => { if (response === 0) updater.quitAndInstall(); });
-  });
-  updater.once('error', (e) => dialog.showMessageBox(win, {
-    type: 'warning', title: 'Обновление', message: 'Не удалось проверить обновления: ' + e.message
-  }));
-  updater.checkForUpdates().catch(() => { });
+/* ---------- обновления (electron-updater + GitHub Releases) ----------
+   Источник обновлений: репозиторий GitHub naemnik6/Chess — артефакты релиза
+   (exe-установщик + latest.yml) публикует GitHub Actions.
+   Чтобы автообновление работало, нужны три условия:
+     • приложение упаковано (app.isPackaged) — при запуске из исходников
+       electron-updater пропускает проверку (dev-режим);
+     • electron-updater лежит в "dependencies" desktop/package.json
+       (НЕ в devDependencies — иначе он не попадает в пакет, и require
+       падает: именно так раньше появлялось «не настроено»);
+     • в resources есть app-update.yml — его генерирует electron-builder
+       из блока build.publish при сборке установщика.
+   Диагностика: каждый этап пишется console.log (видно при запуске из
+   терминала) И дублируется в страницу каналом 'updater:event' — видно
+   в DevTools (Ctrl+Shift+I) на вкладке Console. */
+const RELEASES_URL = 'https://github.com/naemnik6/Chess/releases/latest';
+
+let updater = null;               // autoUpdater из electron-updater
+let updaterLoadError = null;      // почему require('electron-updater') не удался
+let updaterState = 'idle';        // idle | checking | available | not-available | downloading | downloaded | error
+let updaterLastError = null;      // последняя ошибка (для диагностики)
+let uiCheckUntil = 0;             // до этого момента события «молчат» в диалогах: результат покажет UI
+
+function updaterLog(stage, details) {
+  console.log('[updater] ' + stage + (details ? ' — ' + details : ''));
+  try {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('updater:event', {
+        stage: stage,
+        details: details == null ? null : String(details),
+        state: updaterState,
+        appVersion: APP_VERSION,
+        lastError: updaterLastError ? String(updaterLastError.message || updaterLastError) : null,
+        releasesUrl: RELEASES_URL,
+        ts: Date.now()
+      });
+    }
+  } catch (e) { /* окно ещё не создано или уже закрыто — остаётся консоль */ }
 }
 
-ipcMain.handle('app:checkUpdates', () => { checkForUpdates(); return true; });
+/* Диагностика одним объектом: что именно не так (упаковка, updater, app-update.yml) */
+function updaterDiagnostics() {
+  const yml = process.resourcesPath ? path.join(process.resourcesPath, 'app-update.yml') : null;
+  let ymlText = null;
+  try { if (yml && fs.existsSync(yml)) ymlText = fs.readFileSync(yml, 'utf8').slice(0, 600); } catch (e) { }
+  return {
+    packaged: !!app.isPackaged,
+    version: APP_VERSION,
+    resourcesPath: process.resourcesPath || null,
+    appUpdateYmlPath: yml,
+    appUpdateYmlExists: !!(yml && fs.existsSync(yml)),
+    appUpdateYml: ymlText,
+    updaterLoaded: !!updater,
+    updaterLoadError: updaterLoadError ? String(updaterLoadError.message || updaterLoadError) : null,
+    state: updaterState,
+    lastError: updaterLastError ? String(updaterLastError.message || updaterLastError) : null,
+    releasesUrl: RELEASES_URL
+  };
+}
+
+function loadUpdater() {
+  if (updater || updaterLoadError) return updater;
+  try {
+    updater = require('electron-updater').autoUpdater;
+  } catch (e) {
+    updater = null;
+    updaterLoadError = e;
+    updaterLog('load-failed', 'require("electron-updater") упал: ' + (e && e.message || e) +
+      '. Проверьте, что electron-updater указан в "dependencies" (не devDependencies) desktop/package.json.');
+    return null;
+  }
+  updater.autoDownload = true;          // найденную версию качаем сразу, в фоне
+  updater.autoInstallOnAppQuit = true;  // при выходе — установить
+  updater.logger = {                    // подробный внутренний лог electron-updater — в наш лог
+    info: (m) => updaterLog('log-info', typeof m === 'string' ? m : JSON.stringify(m)),
+    warn: (m) => updaterLog('log-warn', typeof m === 'string' ? m : JSON.stringify(m)),
+    error: (m) => updaterLog('log-error', typeof m === 'string' ? m : JSON.stringify(m)),
+    debug: (m) => updaterLog('log-debug', typeof m === 'string' ? m : JSON.stringify(m))
+  };
+
+  /* Все события autoUpdater логируются; нативные диалоги показываем только
+     когда проверка запущена НЕ из интерфейса (иначе интерфейс сам выведет
+     конкретную ошибку — без дубля окон). */
+  const uiQuiet = () => Date.now() < uiCheckUntil;
+
+  updater.on('checking-for-update', () => {
+    updaterState = 'checking';
+    updaterLog('checking-for-update', 'текущая версия ' + APP_VERSION + ', источник: GitHub naemnik6/Chess');
+  });
+  updater.on('update-available', (info) => {
+    updaterState = 'available';
+    updaterLog('update-available', 'версия ' + (info && info.version) + (info && info.releaseDate ? ' от ' + info.releaseDate : ''));
+    if (uiQuiet()) return;
+    dialog.showMessageBox(win, {
+      type: 'info', title: 'Обновление',
+      message: 'Доступна новая версия: ' + (info && info.version),
+      detail: 'Текущая версия: ' + APP_VERSION + '.\nЗагрузка уже идёт в фоне — по окончании предложим перезапустить приложение.',
+      buttons: ['Скачать обновление вручную', 'Хорошо']
+    }).then(({ response }) => { if (response === 0) shell.openExternal(RELEASES_URL); });
+  });
+  updater.on('update-not-available', (info) => {
+    updaterState = 'not-available';
+    updaterLog('update-not-available', 'установлена последняя версия (' + ((info && info.version) || APP_VERSION) + ')');
+  });
+  updater.on('download-progress', (p) => {
+    updaterState = 'downloading';
+    updaterLog('download-progress',
+      (p && p.percent != null ? p.percent.toFixed(1) : '0') + '% · ' +
+      (p && p.transferred != null ? (p.transferred / 1048576).toFixed(1) : '0') + ' МБ из ' +
+      (p && p.total ? (p.total / 1048576).toFixed(1) : '?') + ' МБ');
+  });
+  updater.on('update-downloaded', (info) => {
+    updaterState = 'downloaded';
+    updaterLog('update-downloaded', 'версия ' + (info && info.version) + ' скачана и готова к установке');
+    dialog.showMessageBox(win, {
+      type: 'question', title: 'Обновление готово',
+      message: 'Новая версия ' + ((info && info.version) || '') + ' скачана. Перезапустить и установить сейчас?',
+      detail: 'Данные (архив партий, профили, настройки) сохраняются.',
+      buttons: ['Перезапустить и установить', 'Позже']
+    }).then(({ response }) => { if (response === 0) updater.quitAndInstall(); });
+  });
+  updater.on('error', (err) => {
+    updaterState = 'error';
+    updaterLastError = err;
+    updaterLog('error', (err && err.message || String(err)) + (err && err.stack ? '\n' + err.stack : ''));
+    if (uiQuiet()) return;   // ошибку во всей конкретике покажет интерфейс
+    dialog.showMessageBox(win, {
+      type: 'warning', title: 'Обновление',
+      message: 'Не удалось проверить обновления',
+      detail: 'Ошибка: ' + (err && err.message || String(err)) + '\n\n' +
+        'Возможные причины: нет сети, GitHub недоступен, либо в сборке нет\n' +
+        'resources/app-update.yml (его генерирует electron-builder из блока\n' +
+        'build.publish при сборке установщика). Свежий установщик можно\n' +
+        'скачать вручную со страницы релизов.',
+      buttons: ['Скачать обновление вручную', 'Закрыть']
+    }).then(({ response }) => { if (response === 0) shell.openExternal(RELEASES_URL); });
+  });
+
+  updaterLog('loaded', 'electron-updater подключён');
+  return updater;
+}
+
+/* Ждём однозначного исхода проверки: available / not-available / downloaded / error / таймаут */
+function waitForUpdateOutcome(timeoutMs) {
+  return new Promise((resolve) => {
+    if (!updater) { resolve({ ok: false, reason: 'no-updater', message: 'electron-updater не подключён' }); return; }
+    let done = false;
+    const finish = (r) => {
+      if (done) return;
+      done = true;
+      updater.removeListener('update-available', onAvail);
+      updater.removeListener('update-not-available', onNot);
+      updater.removeListener('update-downloaded', onDown);
+      updater.removeListener('error', onErr);
+      resolve(r);
+    };
+    const onAvail = (info) => finish({
+      ok: true, reason: 'available',
+      message: 'Доступна новая версия: ' + ((info && info.version) || '?') +
+        '. Загрузка идёт в фоне — по окончании приложение предложит перезапуск.',
+      version: info && info.version
+    });
+    const onNot = (info) => finish({
+      ok: true, reason: 'up-to-date',
+      message: 'У вас последняя версия (' + (((info && info.version) || APP_VERSION)) + ').',
+      version: (info && info.version) || APP_VERSION
+    });
+    const onDown = (info) => finish({
+      ok: true, reason: 'downloaded',
+      message: 'Версия ' + ((info && info.version) || '?') + ' уже скачана и будет установлена при перезапуске приложения.',
+      version: info && info.version
+    });
+    const onErr = (err) => finish({
+      ok: false, reason: 'error',
+      message: 'Проверка обновлений не удалась: ' + (err && err.message || String(err)),
+      error: String((err && err.stack) || err)
+    });
+    updater.on('update-available', onAvail);
+    updater.on('update-not-available', onNot);
+    updater.on('update-downloaded', onDown);
+    updater.on('error', onErr);
+    setTimeout(() => finish({
+      ok: false, reason: 'timeout',
+      message: 'Проверка обновлений не завершилась за ' + Math.round(timeoutMs / 1000) +
+        ' с. Проверьте подключение к сети или скачайте обновление вручную.',
+      error: 'timeout after ' + timeoutMs + ' ms'
+    }), timeoutMs);
+  });
+}
+
+/* Полный цикл проверки: диагностика → запуск → ожидание исхода.
+   source: 'startup' (автоматически при запуске) или 'ui' (кнопка в интерфейсе).
+   Возвращает объект результата — интерфейс показывает КОНКРЕТНУЮ ошибку
+   (из лога), а не абстрактное «не настроено». */
+async function runUpdateCheck(source) {
+  updaterLog('check-requested', 'источник: ' + source + ', упаковано: ' + !!app.isPackaged + ', версия: ' + APP_VERSION);
+  const fail = (reason, message) => ({
+    ok: false, reason: reason, message: message,
+    diag: updaterDiagnostics(), releasesUrl: RELEASES_URL
+  });
+
+  if (!app.isPackaged) {
+    const message = 'Проверка обновлений доступна только в установленной версии приложения: ' +
+      'сейчас запущен dev-режим из исходников, electron-updater пропускает проверку для упакованных сборок. ' +
+      'Соберите установщик командой npm run dist:win в папке desktop.';
+    updaterLog('check-skipped', message);
+    return fail('dev', message);
+  }
+  const up = loadUpdater();
+  if (!up) {
+    return fail('no-updater', 'electron-updater не загрузился: ' +
+      (updaterLoadError && updaterLoadError.message || 'неизвестная ошибка') +
+      '. Убедитесь, что он указан в "dependencies" desktop/package.json и попал в сборку.');
+  }
+  const diag = updaterDiagnostics();
+  if (!diag.appUpdateYmlExists) {
+    const message = 'Не найден файл ' + (diag.appUpdateYmlPath || 'resources/app-update.yml') +
+      ' — сборка не содержит источника обновлений. app-update.yml генерирует electron-builder из блока ' +
+      'build.publish (desktop/package.json) при сборке установщика. Пересоберите установщик ' +
+      '(npm run dist:win) или скачайте обновление вручную со страницы релизов.';
+    updaterLog('check-skipped', message);
+    return fail('no-config', message);
+  }
+  try {
+    uiCheckUntil = source === 'ui' ? Date.now() + 35000 : 0;
+    const outcome = waitForUpdateOutcome(30000);
+    await up.checkForUpdates();
+    const result = await outcome;
+    result.diag = updaterDiagnostics();
+    result.releasesUrl = RELEASES_URL;
+    updaterLog('check-result', result.reason + ' — ' + result.message);
+    return result;
+  } catch (e) {
+    updaterState = 'error';
+    updaterLastError = e;
+    updaterLog('check-exception', (e && e.message || String(e)) + (e && e.stack ? '\n' + e.stack : ''));
+    return fail('error', 'Проверка обновлений не удалась: ' + (e && e.message || String(e)));
+  }
+}
+
+/* Кнопка в интерфейсе: возвращаем странице конкретный результат/ошибку и диагностику */
+ipcMain.handle('app:checkUpdates', async () => await runUpdateCheck('ui'));
+ipcMain.handle('app:updateInfo', () => ({
+  version: APP_VERSION, state: updaterState,
+  releasesUrl: RELEASES_URL, diag: updaterDiagnostics()
+}));
 
 /* ---------- запуск ---------- */
 app.whenReady().then(() => {
@@ -311,6 +516,21 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+  /* Автопроверка обновлений при КАЖДОМ запуске — аналог
+     autoUpdater.checkForUpdatesAndNotify(): проверка идёт в фоне, все события
+     логируются (консоль + DevTools), найденная версия скачивается сама,
+     а по готовности появляется диалог «Перезапустить и установить».
+     В dev-режиме (запуск из исходников) пропускаем: electron-updater
+     всё равно не проверяет обновления непакованного приложения. */
+  if (app.isPackaged) {
+    loadUpdater();
+    setTimeout(() => {
+      runUpdateCheck('startup').catch((e) => updaterLog('startup-check-failed', (e && e.message) || String(e)));
+    }, 4000);   // небольшая задержка — не тормозим старт окна
+  } else {
+    updaterLog('startup-skip', 'dev-режим: автопроверка обновлений не выполняется (приложение не упаковано)');
+  }
 });
 app.on('window-all-closed', () => {
   if (engineChild) { try { engineChild.kill(); } catch (e) { } }

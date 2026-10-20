@@ -42,7 +42,15 @@ contextBridge.exposeInMainWorld('Chesster', {
 
   /* меню приложения и обновления */
   onMenu: (name, cb) => ipcRenderer.on('menu:' + name, () => cb()),
+  /* проверка возвращает объект результата: { ok, reason, message, error?, diag, releasesUrl } —
+     интерфейс показывает конкретную ошибку, а не «не настроено» */
   checkUpdates: () => ipcRenderer.invoke('app:checkUpdates'),
+  updateInfo: () => ipcRenderer.invoke('app:updateInfo'),
+  /* события обёртки (checking-for-update, update-available, update-not-available,
+     download-progress, update-downloaded, error, …) — страница пишет их в консоль DevTools */
+  onUpdaterEvent: (cb) => {
+    ipcRenderer.on('updater:event', (_e, payload) => cb(payload));
+  },
 
   /* жизненный цикл */
   appReady: () => Promise.resolve(true),
