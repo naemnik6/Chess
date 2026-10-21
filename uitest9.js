@@ -92,7 +92,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   doc.getElementById('btnSettings').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   ok(App.settingsOpen(), 'настройки открываются кликом по ⚙');
   const cats = [...doc.querySelectorAll('#setNav button')].map(b => b.dataset.sc);
-  ok(cats.join(',') === 'view,archive,engine,events,help,about', 'шесть категорий: ' + cats.join(' / '));
+  ok(cats.join(',') === 'view,colors,archive,engine,events,help,about', 'семь категорий: ' + cats.join(' / '));
   ok([...doc.querySelectorAll('#setScroll section[data-set]')].map(x => x.dataset.set).join(',') === cats.join(','),
     'каждой категории соответствует раздел окна');
   ok(['btnSetFullscreen', 'btnSetPanel', 'btnOffload', 'btnCheckUpdates', 'btnManualUpdate', 'btnClearLog', 'logAll', 'engineList']

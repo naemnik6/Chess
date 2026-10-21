@@ -93,20 +93,37 @@ npm run dist        # Windows: NSIS-установщик + portable exe  → des
 
 ## Альтернатива: Tauri (меньше размер установщика)
 
+С версии 3.0 каркас доведён до **собираемого состояния**: добавлены `Cargo.toml`,
+`build.rs`, `capabilities/default.json` и мост страницы `bridge.js` (внедряется
+как `initialization_script` и повторяет контракт `window.Chesster` из `preload.js`,
+поэтому `src/platform.js` определяет среду `tauri` и работает без изменений).
+Исправлены ошибки конфигурации: путь `beforeBuildCommand`, CSP с `ipc: http://ipc.localhost`
+(без него WebView2 блокирует IPC), убран несуществующий dev-сервер `devUrl`, а `frontendDist`
+переведён на отдельную папку `tauri/dist/` — иначе в бинарник попал бы весь репозиторий
+вместе с `node_modules` Electron. Эту папку собирает корневой `build.js` автоматически.
+
+Отдельно усилен Rust-код: все команды помечены `#[tauri::command(async)]` (иначе системный
+диалог блокировал бы главный поток окна), файл сохраняется текстом UTF-8 (вложенные
+`Uint8Array` JSON-транспорт Tauri не переносит), процесс движка глушится при выходе и перед
+новым запуском, а ссылки открываются через `rundll32`, а не `cmd`.
+
 ```bash
 cd desktop/tauri
+cargo install tauri-cli --version "^2"
 cargo tauri dev      # разработка
-cargo tauri build --target x86_64-pc-windows-msvc    # установщик msi/exe (Windows)
+cargo tauri build    # установщик msi/exe (Windows), deb/AppImage (Linux)
 ```
 
-Конфигурация — `tauri/tauri.conf.json`, команды на Rust — `tauri/src/main.rs`
-(сохранение файла, открытие ссылок, запуск и сопровождение UCI-процесса).
-Фронтенд тот же `index.html`; мост для страницы повторяет контракт
-`window.Chesster`, поэтому `src/platform.js` работает с обеими обёртками одинаково.
+Команды на Rust — `tauri/src/main.rs` (сохранение файла, открытие ссылок, выбор,
+запуск и сопровождение UCI-процесса — под Windows без консольного окна).
+Фронтенд тот же `index.html`. Что пока не перенесено (архив файлом, автообновление,
+нативное меню) и в каком порядке это закрывать — подробно в **`../TAURI.md`**.
+Черновая сборка в CI: workflow `.github/workflows/tauri.yml` (только ручной запуск,
+основной релизный конвейер не затрагивает).
 
 ## Обновления
 
-Версия приложения одна на все среды — `../version.json` (сейчас 2.4); она попадает в категорию
+Версия приложения одна на все среды — `../version.json` (сейчас 3.0); она попадает в категорию
 «О программе» окна настроек и в имя кэша PWA.
 
 * Десктоп: автообновление через **electron-updater** с GitHub-релизов `naemnik6/Chess`.
@@ -154,6 +171,12 @@ desktop/
 ├── rodent4-worker.js  ← шаблон JS-обвязки WASM-движка для Web Worker (контракт UCI)
 ├── icons/             ← icon.svg, icon-*.png, icon.ico (icon.icns — на macOS)
 └── tauri/
-    ├── tauri.conf.json
-    └── src/main.rs    ← команды Tauri v2 (файлы, ссылки, UCI-процесс)
+    ├── tauri.conf.json   ← конфиг Tauri v2 (окно, CSP, сборка фронтенда)
+    ├── Cargo.toml        ← крейт обёртки (tauri 2 + плагин диалогов)
+    ├── build.rs          ← tauri-build
+    ├── bridge.js         ← мост window.Chesster (initialization_script)
+    ├── dist/             ← фронтенд для упаковки (создаёт build.js, не редактируется)
+    ├── .gitignore        ← target/ и gen/schemas/ не попадают в git
+    ├── capabilities/     ← разрешения окна и ядра
+    └── src/main.rs       ← команды Tauri v2 (файлы, ссылки, UCI-процесс)
 ```

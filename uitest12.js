@@ -68,7 +68,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
   console.log('\n— 2.4: категории —');
   const cats = qa('#setNav button').map(x => x.dataset.sc);
-  ok(cats.join(',') === 'view,archive,engine,events,help,about', 'шесть категорий: ' + cats.join(', '));
+  ok(cats.join(',') === 'view,colors,archive,engine,events,help,about', 'семь категорий: ' + cats.join(', '));
   ok(qa('#setScroll section[data-set]').map(x => x.dataset.set).join(',') === cats.join(','),
     'каждой категории соответствует раздел');
   ok(qa('#setScroll section .set-h').length >= 6, 'у разделов есть заголовки');
@@ -80,9 +80,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/\.set-scroll\{[^}]*scroll-behavior:smooth/.test(css) || /scroll-behavior:smooth/.test(css),
     'переход по категориям — плавной прокруткой');
   ok(/\.set-scroll::-webkit-scrollbar[^{]*\{width:9px\}/.test(css) &&
-    /\.set-scroll::-webkit-scrollbar-thumb[^{]*\{[^}]*linear-gradient/.test(css) &&
-    /scrollbar-color:#414e85 #10152a/.test(css),
-    'ползунок окна настроек кастомизирован под дизайн приложения');
+    /\.set-scroll::-webkit-scrollbar-thumb[^{]*\{[^}]*var\(--scroll-thumb\)/.test(css) &&
+    /scrollbar-color:var\(--scroll-thumb\) var\(--scroll-track\)/.test(css),
+    'ползунок окна настроек кастомизирован под дизайн приложения (через переменные темы)');
   ok(/\.set-win\{[^}]*z-index:180/.test(css) && /\.modal-bg\{[^}]*z-index:200/.test(css),
     'окна подтверждений (z 200) открываются поверх настроек (z 180)');
 
@@ -197,8 +197,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
   ok(/git commit -m "Release /.test(bat) && bat.indexOf('git tag v' + PV) >= 0, 'bat: английский коммит Release и тег v' + PV);
   ok(!/[^\x09\x0a\x0d\x20-\x7e]/.test(bat), 'bat: только ASCII — текст в GitHub останется читаемым');
-  ok(App.CHANGELOG.some(r => r[0] === V && /окно настроек/i.test(r[1])), 'в журнале изменений есть запись ' + V + ' про окно настроек');
-  ok(qa('#tabs button').length === 5 && qa('#setNav button').length === 6, 'итог: 5 вкладок + 6 категорий настроек');
+  ok(App.CHANGELOG.some(r => r[0] === '2.4' && /окно настроек/i.test(r[1])), 'в журнале изменений есть запись 2.4 про окно настроек');
+  ok(qa('#tabs button').length === 5 && qa('#setNav button').length === 7, 'итог: 5 вкладок + 7 категорий настроек');
 
   console.log('\n============================');
   console.log(V + ' (uitest12): пройдено ' + pass + ', провалено ' + fail);

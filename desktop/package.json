@@ -1,7 +1,7 @@
 {
   "name": "chesster",
   "productName": "Chess",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "description": "Настольная версия браузерных шахмат: один файл index.html, архив партий, профили, задел под Rodent IV.",
   "main": "main.js",
   "author": "Chesster",

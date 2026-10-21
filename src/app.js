@@ -408,8 +408,8 @@
     $('turnSwatch').title = 'Сейчас ход: ' + nomLow(s.turn);
 
     var turnHTML = '№' + s.full;
-    if (G.playback) turnHTML += ' · <b style="color:#c0aef5">архив</b>';
-    else if (!atLatest()) turnHTML += ' · <b style="color:#f2c14e">просмотр истории</b>';
+    if (G.playback) turnHTML += ' · <b style="color:var(--arch-text)">архив</b>';
+    else if (!atLatest()) turnHTML += ' · <b style="color:var(--gold)">просмотр истории</b>';
     else if (botColor() === s.turn) turnHTML += ' · бот';
     turnEl.innerHTML = turnHTML;
 
@@ -429,7 +429,7 @@
       smallEl.innerHTML = G.playback
         ? 'Партия из архива. ' + esc(info.small)
         : esc(info.small) + (G.savedId
-          ? ' <span style="color:#98a1c4">Партия сохранена в архив.</span>'
+          ? ' <span style="color:var(--muted)">Партия сохранена в архив.</span>'
           : ' <button class="link-btn" id="lnkArchive">Сохранить в архив</button>');
       if (!G.playback && !G.savedId) {
         var lb = $('lnkArchive');
@@ -623,7 +623,7 @@
     d.uciOptions.forEach(function (op) {
       var v = o[op.name] !== undefined ? o[op.name] : '';
       html += '<div class="opt-row"><label for="opt_' + op.name + '">' + esc(op.label) +
-        ' <span style="color:#6c769c">(' + op.name + ')</span></label>' +
+        ' <span style="color:var(--muted2)">(' + op.name + ')</span></label>' +
         '<input id="opt_' + op.name + '" data-opt="' + op.name + '" value="' + esc(v) + '" ' +
         (op.type === 'spin' ? 'type="number"' : 'type="text"') + '></div>';
     });
@@ -1124,7 +1124,7 @@
     $('playersCount').textContent = 'Профилей: ' + ps.length + ' · учтённых партий: ' + Math.round(counted / 2);
     var body = $('playersBody');
     if (!ps.length) {
-      body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6c769c;padding:16px">Профилей пока нет. ' +
+      body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:16px">Профилей пока нет. ' +
         'Они появляются после партий, сохранённых в архив со статистикой.</td></tr>';
       $('playerDetail').innerHTML = '';
       return;
@@ -1184,7 +1184,7 @@
         var res = g.result === '*' ? '—' : ((g.result === '1/2-1/2') ? 'ничья' :
           (((g.result === '1-0') === (keyOf(g.white) === p.name)) ? 'победа' : 'поражение'));
         html += '<div class="g" data-id="' + g.id + '" title="Воспроизвести партию">▶ <span>' + esc(g.title) +
-          '</span><span style="margin-left:auto;color:#98a1c4">' + mine + ' · ' + res + '</span></div>';
+          '</span><span style="margin-left:auto;color:var(--muted)">' + mine + ' · ' + res + '</span></div>';
       });
       html += '</div>';
     }
@@ -1209,7 +1209,7 @@
      разделу; можно просто листать окно — боковина подсвечивает текущий раздел.
      Секции окна постоянно живут в DOM, поэтому журнал, движок и галочки
      доступны коду в любой момент, а окно открывается мгновенно. */
-  var SET_CATS = ['view', 'archive', 'engine', 'events', 'help', 'about'];
+  var SET_CATS = ['view', 'colors', 'archive', 'engine', 'events', 'help', 'about'];
   function settingsOpen() { return $('setWin').classList.contains('open'); }
   function setNavActive(cat) {
     document.querySelectorAll('#setNav button').forEach(function (b) { b.classList.toggle('on', b.dataset.sc === cat); });
@@ -1231,6 +1231,7 @@
       });
       ch.innerHTML = html;
     }
+    buildThemeUI();
   }
   function renderAbout() {
     var i = P.info();
@@ -1264,6 +1265,7 @@
     renderEvents();
     renderEngineTab();
     renderAbout();
+    renderColorsLive();
     var cp = $('chkPanelAuto');
     if (cp) cp.checked = S.settings().panelAutoOpen !== false;
     var cf = $('chkFullStart');
@@ -1394,6 +1396,505 @@
     document.addEventListener('focusout', hideTip);
   }
 
+  /* ============================ ЦВЕТОВАЯ ТЕМА (3.0) ============================
+     Категория «Цвета» в окне настроек: реестр из 72 элементов интерфейса и
+     доски (Theme.GROUPS), HSL-пипетка с палитрой, HEX-полем, прозрачностью и
+     двухцветными градиентами, 7 готовых палитр, экспорт/импорт темы в JSON и
+     точечная раскраска отдельных клеток (расширенный режим, по умолчанию
+     выключен — как и договаривались, сначала только общие цвета клеток).
+     Переопределения живут в настройках (theme, sqColors, themeAdv) и
+     применяются элементом <style id="themeCss"> в конце <head>: он
+     перекрывает переменные :root и, в расширенном режиме, фон отдельных
+     клеток по их постоянному индексу data-sq (0…63, a1…h8). */
+  var T = window.Theme || null;
+
+  function themeStore() {
+    var st = S.settings();
+    return {
+      vars: (st.theme && typeof st.theme === 'object' && !Array.isArray(st.theme)) ? st.theme : {},
+      sq: (st.sqColors && typeof st.sqColors === 'object' && !Array.isArray(st.sqColors)) ? st.sqColors : {},
+      adv: st.themeAdv === true
+    };
+  }
+  function applyThemeNow() {
+    if (!T) return;
+    var t = themeStore();
+    T.apply(t.vars, t.sq, t.adv);
+  }
+
+  /* ---------- построение раздела (один раз за сессию) ---------- */
+  function buildThemeUI() {
+    if (!T) return;
+    var pres = $('themePresets');
+    if (pres && !pres.childElementCount) {
+      var ph = '';
+      T.PRESETS.forEach(function (p) {
+        ph += '<button class="btn btn-mini" data-preset="' + esc(p.id) + '" data-tip="' +
+          (p.vars ? 'Применить готовую палитру «' + esc(p.name) + '»' : 'Вернуть цвета по умолчанию') + '">' +
+          esc(p.name) + '</button>';
+      });
+      pres.innerHTML = ph;
+    }
+    var gr = $('themeGroups');
+    if (gr && !gr.childElementCount) {
+      var gh = '';
+      T.GROUPS.forEach(function (g) {
+        gh += '<details class="tgroup" data-gr="' + esc(g.id) + '"><summary>' + esc(g.name) +
+          '<span class="tg-count" hidden></span></summary><div>';
+        g.items.forEach(function (it) {
+          gh += '<div class="titem" data-var="' + esc(it.v) + '" data-tip="Изменить цвет: ' + esc(it.n) + '">' +
+            '<button class="tsw" type="button" aria-label="Изменить цвет: ' + esc(it.n) + '"><i></i></button>' +
+            '<span class="tname">' + esc(it.n) + '</span>' +
+            '<code class="tcur"></code>' +
+            '<button class="trst" data-tip="Сбросить к значению по умолчанию" hidden>✕</button>' +
+            '</div>';
+        });
+        gh += '</div></details>';
+      });
+      gr.innerHTML = gh;
+    }
+    var mb = $('miniBoard');
+    if (mb && !mb.childElementCount) {
+      var mh = '';
+      for (var drow = 0; drow < 8; drow++) {          /* верхний ряд — 8-я горизонталь */
+        for (var f = 0; f < 8; f++) {
+          var sq = (7 - drow) * 8 + f;
+          mh += '<button data-msq="' + sq + '"><i></i></button>';
+        }
+      }
+      mb.innerHTML = mh;
+      var rk = $('miniRanks');
+      if (rk && !rk.childElementCount) {
+        var rh = '';
+        for (var r = 8; r >= 1; r--) rh += '<span>' + r + '</span>';
+        rk.innerHTML = rh;
+      }
+      var fl = $('miniFiles');
+      if (fl && !fl.childElementCount) {
+        fl.innerHTML = 'abcdefgh'.split('').map(function (c) { return '<span>' + c + '</span>'; }).join('');
+      }
+    }
+  }
+
+  /* ---------- живое обновление раздела ---------- */
+  function renderColorsLive() {
+    if (!T) return;
+    var t = themeStore();
+    document.querySelectorAll('#themeGroups .titem').forEach(function (row) {
+      var v = row.dataset.var;
+      var val = T.effective(t.vars, v);
+      var sw = row.querySelector('.tsw i');
+      if (sw) sw.style.background = val;
+      var cur = row.querySelector('.tcur');
+      if (cur) cur.textContent = val;
+      var rst = row.querySelector('.trst');
+      if (rst) rst.hidden = !Object.prototype.hasOwnProperty.call(t.vars, v);
+    });
+    document.querySelectorAll('#themeGroups .tgroup').forEach(function (g) {
+      var n = 0;
+      g.querySelectorAll('.trst').forEach(function (b) { if (!b.hidden) n++; });
+      var c = g.querySelector('.tg-count');
+      if (c) { c.hidden = (n === 0); c.textContent = 'изменено: ' + n; }
+    });
+    var chk = $('chkThemeAdv');
+    if (chk) chk.checked = t.adv;
+    var ed = $('sqEditor');
+    if (ed) ed.hidden = !t.adv;
+    if (t.adv) {
+      var nSq = 0;
+      document.querySelectorAll('#miniBoard button').forEach(function (b) {
+        var sq = parseInt(b.dataset.msq, 10);
+        var own = Object.prototype.hasOwnProperty.call(t.sq, String(sq));
+        if (own) nSq++;
+        var val = own ? t.sq[String(sq)] : T.effective(t.vars, T.squareIsDark(sq) ? '--dark' : '--light');
+        var i = b.querySelector('i');
+        if (i) i.style.background = val;
+        b.classList.toggle('own', own);
+        b.setAttribute('data-tip', 'Клетка ' + C.nameOf(sq) +
+          (own ? ' — собственный цвет, клик меняет его' : ' — клик задать собственный цвет'));
+        b.setAttribute('aria-label', 'Клетка ' + C.nameOf(sq) + (own ? ', собственный цвет' : ''));
+      });
+      var info = $('sqEditorInfo');
+      if (info) info.innerHTML = 'Раскрашено клеток: <b>' + nSq + '</b> из 64';
+    }
+  }
+
+  /* ---------- HSL-пипетка ----------
+     target: { v:'--light' } — элемент реестра, { sq: 12 } — клетка доски.
+     Во время регулировки значение применяется «вживую» ко всему
+     приложению; «Применить» сохраняет его в настройки, «Отмена» и Esc
+     откатывают предпросмотр (хук G.pickerCancel в closeModal). */
+  function openColorPicker(target) {
+    if (!T || !target) return;
+    var t = themeStore();
+    var isSq = (target.sq !== undefined && target.sq !== null);
+    var item = null, name = '', curVal = '', sq = 0;
+    if (isSq) {
+      sq = parseInt(target.sq, 10) || 0;
+      name = 'Клетка ' + C.nameOf(sq);
+      curVal = Object.prototype.hasOwnProperty.call(t.sq, String(sq))
+        ? t.sq[String(sq)]
+        : T.effective(t.vars, T.squareIsDark(sq) ? '--dark' : '--light');
+    } else {
+      item = T.BY_VAR[target.v];
+      if (!item) return;
+      name = item.n;
+      curVal = T.effective(t.vars, item.v);
+    }
+    var canGrad = isSq ? true : !!item.g;
+
+    function cc(o) { return { h: o.h, s: o.s, l: o.l, a: o.a }; }
+    var st = { grad: false, angle: 145, c1: null, c2: null, main: null, active: 'main' };
+    var g = T.parseGradient(curVal);
+    if (g && canGrad) {
+      st.grad = true; st.angle = g.angle; st.c1 = g.c1; st.c2 = g.c2;
+      st.main = cc(g.c1); st.active = 'c1';
+    } else {
+      var c0 = T.parseColor(curVal) || (g ? g.c1 : null) || { h: 222, s: 40, l: 40, a: 1 };
+      st.main = cc(c0);
+      st.c1 = cc(c0);
+      st.c2 = cc({ h: c0.h, s: c0.s, l: Math.max(0, c0.l - 18), a: c0.a });
+    }
+
+    var palH = '';
+    T.PALETTE.forEach(function (col) {
+      palH += '<button class="cp-pal" data-c="' + col + '" style="background:' + col + '" title="' + col + '" aria-label="Цвет ' + col + '"></button>';
+    });
+    var html = '<h2>🎨 ' + esc(name) + '</h2>' +
+      '<div class="cp-top">' +
+        '<div class="cp-preview"><i id="cpPrev"></i></div>' +
+        '<div class="cp-right"><div class="cp-palette">' + palH + '</div><div class="cp-val" id="cpVal"></div></div>' +
+      '</div>' +
+      '<div class="cp-row"><span class="cp-lab">Тон (H)</span><input type="range" id="cpH" min="0" max="360" step="1" aria-label="Тон"><span class="cp-num" id="cpHn"></span></div>' +
+      '<div class="cp-row"><span class="cp-lab">Насыщенность (S)</span><input type="range" id="cpS" min="0" max="100" step="1" aria-label="Насыщенность"><span class="cp-num" id="cpSn"></span></div>' +
+      '<div class="cp-row"><span class="cp-lab">Светлота (L)</span><input type="range" id="cpL" min="0" max="100" step="1" aria-label="Светлота"><span class="cp-num" id="cpLn"></span></div>' +
+      '<div class="cp-row"><span class="cp-lab">Прозрачность (A)</span><input type="range" id="cpA" min="0" max="100" step="1" aria-label="Прозрачность"><span class="cp-num" id="cpAn"></span></div>' +
+      '<div class="cp-row"><span class="cp-lab">HEX-код</span><input class="inp cp-hex" id="cpHex" maxlength="9" spellcheck="false" aria-label="HEX-код"><span class="cp-target-hint" id="cpTarget"></span></div>' +
+      (canGrad
+        ? '<label class="chk"><input type="checkbox" id="cpGrad"> Двухцветный градиент</label>' +
+          '<div id="cpGradBox" hidden>' +
+            '<div class="cp-row"><span class="cp-lab">Угол</span><input type="range" id="cpAngle" min="0" max="360" step="1" aria-label="Угол градиента"><span class="cp-num" id="cpAnglen"></span></div>' +
+            '<div class="cp-stops">' +
+              '<button class="cp-stop" id="cpStop1" type="button"><i></i>Начало</button>' +
+              '<button class="cp-stop" id="cpStop2" type="button"><i></i>Конец</button>' +
+            '</div>' +
+            '<div class="cp-grad-preview" id="cpGradPrev"></div>' +
+            '<div class="cp-target-hint">Ползунки выше меняют цвет выбранного стопа градиента.</div>' +
+          '</div>'
+        : '<div class="cp-target-hint">Для этого элемента градиент недоступен: значение подставляется внутрь других цветов.</div>') +
+      '<div class="btns" style="grid-template-columns:1fr 1fr 1fr;margin-top:12px">' +
+        '<button class="btn" data-a="def" data-tip="Вернуть значение по умолчанию">↺ По умолчанию</button>' +
+        '<button class="btn" data-a="cancel">Отмена</button>' +
+        '<button class="btn primary" data-a="ok">Применить</button>' +
+      '</div>';
+    var box = openModal(html, true);
+
+    var $h = box.querySelector('#cpH'), $s = box.querySelector('#cpS'),
+      $l = box.querySelector('#cpL'), $a = box.querySelector('#cpA'),
+      $hn = box.querySelector('#cpHn'), $sn = box.querySelector('#cpSn'),
+      $ln = box.querySelector('#cpLn'), $an = box.querySelector('#cpAn'),
+      $hex = box.querySelector('#cpHex'), $prev = box.querySelector('#cpPrev'),
+      $val = box.querySelector('#cpVal'), $tgt = box.querySelector('#cpTarget'),
+      $gchk = box.querySelector('#cpGrad'), $gbox = box.querySelector('#cpGradBox'),
+      $ang = box.querySelector('#cpAngle'), $angn = box.querySelector('#cpAnglen'),
+      $st1 = box.querySelector('#cpStop1'), $st2 = box.querySelector('#cpStop2'),
+      $gprev = box.querySelector('#cpGradPrev');
+
+    function activeColor() {
+      if (st.grad) return st.active === 'c2' ? st.c2 : st.c1;
+      return st.main;
+    }
+    function draftValue() {
+      return st.grad ? T.fmtGradient(st.angle, st.c1, st.c2) : T.fmtColor(st.main);
+    }
+    function livePreview(v) {
+      if (!T.validValue(v)) return;
+      if (isSq) {
+        var sqm = Object.assign({}, t.sq);
+        sqm[String(sq)] = v;
+        T.apply(t.vars, sqm, true);
+      } else {
+        var vars = Object.assign({}, t.vars);
+        vars[item.v] = v;
+        T.apply(vars, t.sq, t.adv);
+      }
+    }
+    function updateUI() {
+      var c = activeColor();
+      $h.value = c.h; $s.value = c.s; $l.value = c.l; $a.value = Math.round(c.a * 100);
+      $hn.textContent = c.h + '°';
+      $sn.textContent = c.s + '%';
+      $ln.textContent = c.l + '%';
+      $an.textContent = Math.round(c.a * 100) + '%';
+      $h.style.setProperty('--cp-track', 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)');
+      $s.style.setProperty('--cp-track', 'linear-gradient(90deg,' + T.fmtColor({ h: c.h, s: 0, l: c.l, a: 1 }) + ',' + T.fmtColor({ h: c.h, s: 100, l: c.l, a: 1 }) + ')');
+      $l.style.setProperty('--cp-track', 'linear-gradient(90deg,#000,' + T.fmtColor({ h: c.h, s: c.s, l: 50, a: 1 }) + ',#fff)');
+      $a.style.setProperty('--cp-track', 'linear-gradient(90deg,rgba(10,13,26,0),' + T.fmtColor({ h: c.h, s: c.s, l: c.l, a: 1 }) + ')');
+      var rgb = T.hslToRgb(c.h, c.s, c.l);
+      $hex.value = T.rgbToHex(rgb.r, rgb.g, rgb.b);
+      var v = draftValue();
+      $prev.style.background = v;
+      $val.textContent = v;
+      if (canGrad) {
+        $gbox.hidden = !st.grad;
+        $gchk.checked = st.grad;
+        if (st.grad) {
+          $ang.value = st.angle;
+          $angn.textContent = st.angle + '°';
+          $st1.querySelector('i').style.background = T.fmtColor(st.c1);
+          $st2.querySelector('i').style.background = T.fmtColor(st.c2);
+          $st1.classList.toggle('on', st.active === 'c1');
+          $st2.classList.toggle('on', st.active === 'c2');
+          $gprev.style.background = T.fmtGradient(st.angle, st.c1, st.c2);
+        }
+      }
+      $tgt.textContent = st.grad
+        ? (st.active === 'c2' ? 'Редактируется конец градиента' : 'Редактируется начало градиента')
+        : '';
+      livePreview(v);
+    }
+
+    [$h, $s, $l, $a].forEach(function (el) {
+      el.addEventListener('input', function () {
+        var c = activeColor();
+        c.h = parseInt($h.value, 10); c.s = parseInt($s.value, 10);
+        c.l = parseInt($l.value, 10); c.a = parseInt($a.value, 10) / 100;
+        updateUI();
+      });
+    });
+    $hex.addEventListener('change', function () {
+      var raw = String($hex.value || '').trim();
+      var rgb = T.hexToRgb(raw);
+      if (!rgb) { updateUI(); return; }
+      var hsl = T.rgbToHsl(rgb.r, rgb.g, rgb.b);
+      var c = activeColor();
+      c.h = hsl.h; c.s = hsl.s; c.l = hsl.l;
+      var digits = raw.replace(/^#/, '').length;
+      if (digits === 4 || digits === 8) c.a = rgb.a;   /* прозрачность — только из 8-значного HEX */
+      updateUI();
+    });
+    box.querySelector('.cp-palette').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.cp-pal') : null;
+      if (!b) return;
+      var pc = T.parseColor(b.dataset.c);
+      if (!pc) return;
+      var c = activeColor();
+      c.h = pc.h; c.s = pc.s; c.l = pc.l;             /* прозрачность сохраняем */
+      updateUI();
+    });
+    if (canGrad) {
+      $gchk.addEventListener('change', function () {
+        st.grad = $gchk.checked;
+        if (st.grad) {
+          st.c1 = cc(st.main);
+          st.c2 = cc({ h: st.main.h, s: st.main.s, l: Math.max(0, st.main.l - 18), a: st.main.a });
+          st.active = 'c1';
+        } else {
+          st.main = cc(st.active === 'c2' ? st.c2 : st.c1);
+          st.active = 'main';
+        }
+        updateUI();
+      });
+      $ang.addEventListener('input', function () { st.angle = parseInt($ang.value, 10); updateUI(); });
+      $st1.addEventListener('click', function () { st.active = 'c1'; updateUI(); });
+      $st2.addEventListener('click', function () { st.active = 'c2'; updateUI(); });
+    }
+
+    function commit(v) {
+      if (isSq) {
+        var sqm = Object.assign({}, t.sq);
+        if (v === null) delete sqm[String(sq)];
+        else if (T.validValue(v)) sqm[String(sq)] = v;
+        S.setSetting('sqColors', sqm);
+      } else {
+        var vars = Object.assign({}, t.vars);
+        if (v === null) delete vars[item.v];
+        else if (T.validValue(v)) vars[item.v] = v;
+        S.setSetting('theme', vars);
+      }
+      G.pickerCancel = null;
+      closeModal();
+      applyThemeNow();
+      renderColorsLive();
+      sfx('click');
+    }
+    box.querySelector('[data-a=ok]').addEventListener('click', function () { commit(draftValue()); });
+    box.querySelector('[data-a=cancel]').addEventListener('click', function () { closeModal(); });
+    box.querySelector('[data-a=def]').addEventListener('click', function () { commit(null); });
+
+    /* Esc и любой другой путь закрытия окна — откат предпросмотра */
+    G.pickerCancel = function () { T.apply(t.vars, t.sq, t.adv); };
+    updateUI();
+  }
+
+  /* ---------- сброс одного элемента ---------- */
+  function resetThemeVar(v) {
+    if (!T || !T.validVar(v)) return;
+    var vars = Object.assign({}, S.settings().theme || {});
+    delete vars[v];
+    S.setSetting('theme', vars);
+    applyThemeNow();
+    renderColorsLive();
+  }
+
+  /* ---------- готовые палитры ---------- */
+  function applyPreset(id) {
+    if (!T) return;
+    var p = null;
+    T.PRESETS.forEach(function (x) { if (x.id === id) p = x; });
+    if (!p) return;
+    var vars = {};
+    if (p.vars) {
+      for (var k in p.vars) {
+        if (T.validVar(k) && T.validValue(p.vars[k])) vars[k] = p.vars[k];
+      }
+    }
+    S.setSetting('theme', vars);
+    applyThemeNow();
+    renderColorsLive();
+    toast('ПАЛИТРА «' + p.name.toUpperCase() + '»', 'arch',
+      p.vars ? 'Цвета применены — их можно донастроить по элементам' : 'Восстановлены цвета по умолчанию');
+  }
+
+  /* ---------- сброс всей темы ---------- */
+  function resetTheme() {
+    confirmBox('Сбросить цвета?',
+      'Цвета всех элементов, клеток и градиенты вернутся к значениям по умолчанию. Действие необратимо.',
+      'Сбросить', true, function (yes) {
+        if (!yes) return;
+        S.setSetting('theme', {});
+        S.setSetting('sqColors', {});
+        applyThemeNow();
+        renderColorsLive();
+        toast('ТЕМА СБРОШЕНА', 'info', 'Восстановлено оформление по умолчанию');
+      });
+  }
+
+  /* ---------- экспорт темы ---------- */
+  function exportTheme() {
+    var t = themeStore();
+    var json = JSON.stringify({ format: 'chesster-theme', v: 3, theme: t.vars, squares: t.sq, adv: t.adv }, null, 2);
+    var box = openModal('<h2>Экспорт темы</h2>' +
+      '<p>Скопируйте текст — это ваша тема целиком (цвета элементов, клетки, градиенты). Его можно импортировать на любом устройстве.</p>' +
+      '<textarea class="inp" id="themeJsonOut" rows="9" readonly>' + esc(json) + '</textarea>' +
+      '<div class="btns" style="margin-top:10px"><button class="btn" data-a="copy">⧉ Скопировать</button>' +
+      '<button class="btn primary" data-a="close">Закрыть</button></div>');
+    box.querySelector('[data-a=close]').addEventListener('click', function () { closeModal(); });
+    box.querySelector('[data-a=copy]').addEventListener('click', function () {
+      var ta = box.querySelector('#themeJsonOut');
+      var done = function () { toast('СКОПИРОВАНО', 'info', 'JSON темы — в буфере обмена'); };
+      var fallback = function () {
+        try { ta.focus(); ta.select(); document.execCommand('copy'); done(); } catch (e) { /* пользователь скопирует вручную */ }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(json).then(done, fallback);
+      else fallback();
+    });
+  }
+
+  /* ---------- импорт темы ---------- */
+  function importTheme() {
+    var box = openModal('<h2>Импорт темы</h2>' +
+      '<p>Вставьте JSON ранее экспортированной темы. Невалидные и подозрительные значения отбрасываются.</p>' +
+      '<textarea class="inp" id="themeJsonIn" rows="9" spellcheck="false"></textarea>' +
+      '<div class="hint" id="themeImpHint" style="margin-top:6px"></div>' +
+      '<div class="btns" style="margin-top:10px"><button class="btn" data-a="cancel">Отмена</button>' +
+      '<button class="btn primary" data-a="ok">Применить тему</button></div>');
+    box.querySelector('[data-a=cancel]').addEventListener('click', function () { closeModal(); });
+    box.querySelector('[data-a=ok]').addEventListener('click', function () {
+      var hint = box.querySelector('#themeImpHint');
+      var raw = box.querySelector('#themeJsonIn').value;
+      var data = null;
+      try { data = JSON.parse(raw); } catch (e) { data = null; }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        hint.textContent = 'Это не похоже на JSON темы.';
+        return;
+      }
+      var vars = {}, sq = {}, applied = 0, dropped = 0;
+      var src = (data.theme && typeof data.theme === 'object') ? data.theme : {};
+      for (var k in src) {
+        /* градиент — только элементам, которые его поддерживают (фон, а не текст) */
+        var it = T.BY_VAR[k];
+        if (it && T.validValue(src[k]) && (!T.isGradient(src[k]) || it.g)) { vars[k] = src[k]; applied++; }
+        else dropped++;
+      }
+      var srcSq = (data.squares && typeof data.squares === 'object') ? data.squares : {};
+      for (var ks in srcSq) {
+        if (T.validSquareKey(ks) && T.validValue(srcSq[ks])) { sq[String(Number(ks))] = srcSq[ks]; applied++; }
+        else dropped++;
+      }
+      if (!applied) {
+        hint.textContent = 'В файле нет ни одного допустимого значения.' + (dropped ? ' Отброшено: ' + dropped + '.' : '');
+        return;
+      }
+      S.setSetting('theme', vars);
+      S.setSetting('sqColors', sq);
+      S.setSetting('themeAdv', data.adv === true && Object.keys(sq).length > 0);
+      applyThemeNow();
+      renderColorsLive();
+      closeModal();
+      toast('ТЕМА ПРИМЕНЕНА', 'arch', 'Значений: ' + applied + (dropped ? ' · отброшено: ' + dropped : ''));
+    });
+  }
+
+  /* ---------- привязка кнопок раздела ---------- */
+  function bindThemeUI() {
+    if (!T) return;
+    var br = $('btnThemeReset');
+    if (br) br.addEventListener('click', resetTheme);
+    var be = $('btnThemeExport');
+    if (be) be.addEventListener('click', exportTheme);
+    var bi = $('btnThemeImport');
+    if (bi) bi.addEventListener('click', importTheme);
+    var ca = $('chkThemeAdv');
+    if (ca) ca.addEventListener('change', function () {
+      S.setSetting('themeAdv', ca.checked);
+      applyThemeNow();
+      renderColorsLive();
+      if (ca.checked) toast('ТОЧЕЧНЫЙ РЕЖИМ', 'arch', 'Мини-доска ниже: клик по клетке меняет её цвет');
+    });
+    var sc = $('btnSqClear');
+    if (sc) sc.addEventListener('click', function () {
+      confirmBox('Очистить цвета клеток?',
+        'Собственные цвета всех клеток будут удалены; общие цвета светлых и тёмных клеток останутся.',
+        'Очистить', true, function (yes) {
+          if (!yes) return;
+          S.setSetting('sqColors', {});
+          applyThemeNow();
+          renderColorsLive();
+        });
+    });
+    var pres = $('themePresets');
+    if (pres) pres.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-preset]') : null;
+      if (b) applyPreset(b.dataset.preset);
+    });
+    var gr = $('themeGroups');
+    /* клавиатура: строка реестра открывается Enter/Пробелом на образце цвета */
+    if (gr) gr.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      var row = e.target.closest ? e.target.closest('.titem') : null;
+      if (!row || e.target.closest('.trst')) return;
+      e.preventDefault();
+      openColorPicker({ v: row.dataset.var });
+    });
+    if (gr) gr.addEventListener('click', function (e) {
+      var near = function (sel) { return e.target.closest ? e.target.closest(sel) : null; };
+      var rst = near('.trst');
+      if (rst) {
+        var rowR = near('.titem');
+        if (rowR) resetThemeVar(rowR.dataset.var);
+        return;
+      }
+      var row = near('.titem');
+      if (row) openColorPicker({ v: row.dataset.var });
+    });
+    var mb = $('miniBoard');
+    if (mb) mb.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-msq]') : null;
+      if (b) openColorPicker({ sq: parseInt(b.dataset.msq, 10) });
+    });
+  }
+
   var CHANGELOG = [
     ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
     ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
@@ -1405,7 +1906,8 @@
     ['2.3', 'Архив в десктопе хранится файлом на устройстве без ограничений (и отключаемый лимит в браузере); перевес материала отдельной строкой под именем; «Отмена» в диалоге превращения по центру; стрелки: правый клик и тяга в клетке рисуют круг, повтор удаляет пометку, короткий левый клик или ход стирают всё; убран подзаголовок под логотипом; убраны лишние полосы прокрутки в панели; «История изменений» в меню приложения; релизы и тесты только под Windows.'],
     ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
     ['2.4', 'Меню приложения «⋮» пересобрано в полноценное окно настроек с категориями: Вид, Архив, Движок, Журнал, Справка и О программе — переход кликом по категории или обычной прокруткой, ползунок окна стилизован под дизайн приложения. Вкладки «Журнал» и «Движок» переехали из бокового меню в настройки; «Перевернуть доску» осталось во вкладке «Ходы»; дубли кнопок (новая партия, вернуть ход, сохранение, выгрузка, стрелки, FEN/PGN, Lichess) убраны — они уже есть в основном меню. Подсказки кнопок переведены в один верхний слой с переносом текста: больше не появляются горизонтальные ползунки и описания не прячутся под вкладки. Напоминание о выгрузке архива можно отключить (настройки → «Архив»). Ошибка проверки обновлений больше не вываливает простыню HTTP-заголовков: короткое сообщение, полный текст — в раскрывающемся блоке «Технические подробности».'],
-    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе.'],
+    ['3.0', 'Дизайнерское обновление: полная настройка цветов. В окне настроек (⚙) появилась категория «Цвета»: 72 элемента интерфейса и доски в пяти раскрывающихся группах — фон и панели, текст и акценты, кнопки и ползунки, доска (клетки, рамка, координаты, подсветки хода, шаха и взятия, тень фигур), а также подсказки, диалог превращения, кнопка Lichess, логотип, плашка просмотра истории и шкала квоты архива. У каждого элемента — HSL-пипетка с готовой палитрой из 36 образцов, HEX-полем, прозрачностью и двухцветными градиентами с настройкой угла; раздел доступен и с клавиатуры (Tab, Enter). Семь готовых палитр: Классика, Лёд, Изумруд, Сепия, Виолет, Багрянец, Графит. Точечная раскраска отдельных клеток a1…h8 с привязкой к полям доски — в расширенном режиме (по умолчанию выключен). Экспорт и импорт темы в JSON с отбрасыванием недопустимых значений, сброс отдельного элемента и всей темы; изменения применяются мгновенно с живым предпросмотром, «Отмена» и Esc возвращают прежний цвет. Обёртка Tauri доведена до собираемого состояния: Cargo.toml, build.rs, capabilities, мост window.Chesster, отдельная папка dist для фронтенда; оценка и план переноса — в TAURI.md.'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md).'],
   ];
   function showChangelog() { openSettings('help'); }
   function showAbout() { openSettings('about'); }
@@ -1794,6 +2296,13 @@
   }
   function closeModal() {
     if (!G.modal) return;
+    /* если закрывается цветовая пипетка (Esc, программное закрытие) —
+       откатываем живой предпросмотр темы к сохранённым значениям */
+    if (G.pickerCancel) {
+      var pf = G.pickerCancel;
+      G.pickerCancel = null;
+      try { pf(); } catch (e) { /* тема восстановится следующим применением */ }
+    }
     var promo = G.modal.promo;
     G.modal.bg.remove();
     G.modal = null;
@@ -2779,6 +3288,8 @@
     bindDesktopMenu();
     bindUpdaterEvents();
     bind();
+    applyThemeNow();      /* сохранённая цветовая тема — до первой отрисовки */
+    bindThemeUI();
     var restored = restore();
     if (!restored) {
       var s = C.startState();
@@ -2820,6 +3331,9 @@
     showChangelog: showChangelog, CHANGELOG: CHANGELOG, showHelp: showHelp,
     openSettings: openSettings, closeSettings: closeSettings, settingsOpen: settingsOpen,
     toggleSettings: toggleSettings, scrollToCat: scrollToCat, SET_CATS: SET_CATS,
+    applyThemeNow: applyThemeNow, openColorPicker: openColorPicker, applyPreset: applyPreset,
+    renderColorsLive: renderColorsLive, buildThemeUI: buildThemeUI, exportTheme: exportTheme,
+    importTheme: importTheme, themeStore: themeStore,
     maybeRemindOffload: maybeRemindOffload, showTip: showTip, hideTip: hideTip,
     toggleFullscreen: toggleFullscreen,
     showAbout: showAbout, checkUpdates: checkUpdates,

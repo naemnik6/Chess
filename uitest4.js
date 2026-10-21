@@ -131,7 +131,7 @@ setTimeout(() => {
   const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
   ok(/\.sq \.pcwrap\{[^}]*z-index:2[^}]*\}/.test(css), 'в CSS фигура поднята над подсветками (z-index:2)');
   ok(/\.sq::before,\.sq::after\{z-index:1\}/.test(css), 'подсветки лежат под фигурами (z-index:1)');
-  ok(/\.sq\.check::after\{[^}]*rgba\(255,60,60,0\) 30%/.test(css), 'центр подсветки шаха прозрачный — короля не засвечивает');
+  ok(/\.sq\.check::after\{[^}]*transparent 30%/.test(css), 'центр подсветки шаха прозрачный — короля не засвечивает');
   ok(/\.crd\{position:absolute;z-index:3/.test(css), 'координаты поверх подсветки');
 
   console.log('\n— Взятые фигуры на светлых фишках —');

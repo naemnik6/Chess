@@ -46,7 +46,7 @@
       </div>
       <!-- окно настроек: заменило меню приложения «⋮» и кнопку справки «?» —
            вся справка, вид, движок, журнал и технические пункты собраны там -->
-      <button class="icon-btn" id="btnSettings" data-tip="Настройки: вид, архив, движок, журнал, справка, о программе" aria-label="Настройки" aria-expanded="false">⚙</button>
+      <button class="icon-btn" id="btnSettings" data-tip="Настройки: вид, цвета, архив, движок, журнал, справка, о программе" aria-label="Настройки" aria-expanded="false">⚙</button>
     </div>
   </header>
 
@@ -240,6 +240,7 @@
   <div class="set-body">
     <nav class="set-nav" id="setNav" aria-label="Категории настроек">
       <button data-sc="view" class="on">🎨 Вид</button>
+      <button data-sc="colors">🌈 Цвета</button>
       <button data-sc="archive">🗂 Архив</button>
       <button data-sc="engine">🧩 Движок</button>
       <button data-sc="events">📜 Журнал</button>
@@ -258,6 +259,45 @@
         <label class="chk"><input type="checkbox" id="chkPanelAuto"> Открывать меню при запуске (рекомендуется на компьютере)</label>
         <label class="chk"><input type="checkbox" id="chkFullStart"> Запускать во весь экран (компьютер)</label>
         <div class="hint">Ручной переворот доски остался во вкладке «Ходы»: кнопка ⇅ или клавиша F.</div>
+      </section>
+
+      <section data-set="colors">
+        <h3 class="set-h">Цвета</h3>
+        <div class="hint" style="margin-bottom:10px">
+          Здесь перекрашивается любой элемент приложения — 72 элемента в пяти раскрывающихся группах.
+          Кликните по строке или образцу цвета (с клавиатуры: Tab, затем Enter) — откроется пипетка HSL
+          с готовой палитрой, HEX-полем, прозрачностью и градиентами. Изменения видны сразу;
+          кнопка «Применить» сохраняет их, «Отмена» и Esc возвращают прежний цвет.
+        </div>
+        <div class="lbl">Готовые палитры</div>
+        <div class="set-actions" id="themePresets"></div>
+        <div class="set-actions">
+          <button class="btn btn-mini" id="btnThemeReset" data-tip="Вернуть всем цветам и клеткам значения по умолчанию">↺ Сбросить всё</button>
+          <button class="btn btn-mini" id="btnThemeExport" data-tip="Показать тему в виде JSON-текста: его можно сохранить и перенести на другое устройство">⧉ Экспорт</button>
+          <button class="btn btn-mini" id="btnThemeImport" data-tip="Вставить JSON ранее экспортированной темы">⬆ Импорт</button>
+        </div>
+        <div class="lbl" style="margin-top:12px">Элементы интерфейса и доски</div>
+        <div id="themeGroups"></div>
+        <label class="chk"><input type="checkbox" id="chkThemeAdv"> Точечная раскраска отдельных клеток (расширенный режим)</label>
+        <div class="hint">
+          По умолчанию доступны только общие цвета светлых и тёмных клеток. В расширенном режиме
+          появляется мини-доска: каждой клетке можно задать собственный цвет или градиент.
+          Точечные цвета привязаны к полям доски (a1…h8) и поворачиваются вместе с ней.
+        </div>
+        <div id="sqEditor" hidden>
+          <div class="row between" style="margin:8px 0 2px">
+            <span class="hint" id="sqEditorInfo"></span>
+            <button class="btn btn-mini" id="btnSqClear" data-tip="Убрать собственные цвета у всех клеток">🗑 Очистить клетки</button>
+          </div>
+          <div class="mini-wrap">
+            <div class="mini-ranks" id="miniRanks"></div>
+            <div class="mini-col">
+              <div class="mini-board" id="miniBoard"></div>
+              <div class="mini-files" id="miniFiles"></div>
+            </div>
+          </div>
+          <div class="hint">Кликните клетку, чтобы изменить её цвет. Клетки с собственным цветом помечены золотой точкой.</div>
+        </div>
       </section>
 
       <section data-set="archive">
@@ -352,6 +392,9 @@
 </script>
 <script>
 /*@STORE@*/
+</script>
+<script>
+/*@THEME@*/
 </script>
 <script>
 /*@BOT@*/

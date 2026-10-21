@@ -31,6 +31,7 @@ const parts = {
   '<!--@PIECES@-->': pieceSprite(),
   '/*@ENGINE@*/': read('src/engine.js'),
   '/*@STORE@*/': read('src/store.js'),
+  '/*@THEME@*/': read('src/theme.js'),
   '/*@BOT@*/': read('src/bot.js'),
   '/*@PLATFORM@*/': read('src/platform.js'),
   '/*@ENGINES@*/': read('src/engines.js'),
@@ -53,9 +54,27 @@ for (const [ph, code] of Object.entries(parts)) {
 const sw = read('src/sw.template.js').replace('/*@SWV@*/', () => appVersion + '-' + buildStamp);
 fs.writeFileSync(path.join(root, 'sw.js'), sw);
 
-const left = html.match(/@(STYLE|PIECES|ENGINE|STORE|PLATFORM|ENGINES|BOT|APP)@/);
+const left = html.match(/@(STYLE|PIECES|ENGINE|STORE|THEME|PLATFORM|ENGINES|BOT|APP)@/);
 if (left) throw new Error('Остался незаменённый плейсхолдер: ' + left[0]);
 
 fs.writeFileSync(path.join(root, 'index.html'), html);
 console.log(`index.html собран: ${(Buffer.byteLength(html) / 1024).toFixed(1)} КБ · версия ${appVersion} · сборка ${buildStamp}`);
 console.log(`sw.js обновлён: кэш chesster-${appVersion}-${buildStamp}`);
+
+/* ---------- копия фронтенда для обёртки Tauri ----------
+   tauri.conf.json указывает frontendDist на desktop/tauri/dist, а не на корень
+   проекта: иначе в бинарник попал бы весь репозиторий (тесты, исходники,
+   desktop/node_modules на сотни мегабайт). Сервис-воркер сюда намеренно не
+   копируется — в обёртке офлайн-кэш не нужен (регистрация sw.js тихо
+   отменяется), а манифест и иконка копируются, чтобы не было ошибок 404. */
+const tauriRoot = path.join(root, 'desktop', 'tauri');
+if (fs.existsSync(tauriRoot)) {
+  const dist = path.join(tauriRoot, 'dist');
+  fs.mkdirSync(path.join(dist, 'desktop', 'icons'), { recursive: true });
+  fs.writeFileSync(path.join(dist, 'index.html'), html);
+  for (const rel of ['manifest.webmanifest', 'desktop/icons/icon-192.png']) {
+    const src = path.join(root, rel);
+    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dist, rel));
+  }
+  console.log('desktop/tauri/dist обновлён: index.html + манифест + иконка (фронтенд для Tauri)');
+}

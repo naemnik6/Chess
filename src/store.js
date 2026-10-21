@@ -60,7 +60,10 @@
     mode: 'hotseat', level: 'medium', volume: 0.75, sound: true,
     flipped: false, autoFlip: false,
     meWhite: '', meBlack: '',
-    countAnon: true, archiveReminder: 30, archiveReminderOn: true, activeTab: 'moves'
+    countAnon: true, archiveReminder: 30, archiveReminderOn: true, activeTab: 'moves',
+    /* цветовая тема (3.0): переопределения CSS-переменных, точечные цвета
+       клеток (ключи "0".."63") и флаг расширенного режима раскраски */
+    theme: {}, sqColors: {}, themeAdv: false
   };
 
   var set = {};
@@ -103,6 +106,10 @@
     for (var key in DEFAULT_SETTINGS) {
       set[key] = s2[key] !== undefined ? s2[key] : DEFAULT_SETTINGS[key];
     }
+    /* тема (3.0): страховка от повреждённых сохранённых значений */
+    if (!set.theme || typeof set.theme !== 'object' || Array.isArray(set.theme)) set.theme = {};
+    if (!set.sqColors || typeof set.sqColors !== 'object' || Array.isArray(set.sqColors)) set.sqColors = {};
+    set.themeAdv = set.themeAdv === true;
   }
   reloadBlocks();
 

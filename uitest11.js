@@ -101,7 +101,7 @@ const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
   ok(BA.CHANGELOG.some(r => r[0] === V), 'в журнале есть запись текущей версии ' + V);
   const planRow = BA.CHANGELOG.find(r => r[0] === 'план');
   ok(planRow && !/автообновления через GitHub Actions/i.test(planRow[1]), 'из «плана» убран пункт про автообновления (реализовано)');
-  ok(/окно настроек/i.test((BA.CHANGELOG.find(r => r[0] === V) || ['',''])[1]), 'запись ' + V + ' описывает окно настроек');
+  ok(/окно настроек/i.test((BA.CHANGELOG.find(r => r[0] === '2.4') || ['',''])[1]), 'запись 2.4 описывает окно настроек');
   BA.closeSettings();
 
   console.log('\n— 2.3.1/2.4: короткий левый клик стирает стрелки (браузер) —');

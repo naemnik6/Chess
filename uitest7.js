@@ -199,7 +199,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const preload = fs.readFileSync(__dirname + '/desktop/preload.js', 'utf8');
   ok(/contextBridge\.exposeInMainWorld\('Chesster'/.test(preload), 'preload отдаёт странице только узкий мост window.Chesster');
   const tauri = fs.readFileSync(__dirname + '/desktop/tauri/src/main.rs', 'utf8');
-  ok(/#\[tauri::command\]/.test(tauri) && /engine_spawn/.test(tauri), 'Tauri: команды сохранения, ссылок и запуска движка');
+  ok(/#\[tauri::command(\(async\))?\]/.test(tauri) && /save_file/.test(tauri) &&
+    /open_external/.test(tauri) && /engine_spawn/.test(tauri),
+    'Tauri: команды сохранения, ссылок и запуска движка');
 
   console.log(`\nИТОГ: ${pass} пройдено, ${fail} провалено`);
   process.exit(fail ? 1 : 0);
