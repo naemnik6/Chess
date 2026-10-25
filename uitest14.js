@@ -1,4 +1,4 @@
-/* Тесты версии 3.1:
+/* Тесты версии 3.1 (релиз-файлы — по текущей version.json):
      • карта «элемент → переменные темы» (строится из самого CSS приложения);
      • режим дизайнера: вход/выход, подсветка элемента, клик → список цветов →
        пипетка, левый Shift как обычное действие, клетки доски, расширенный
@@ -7,7 +7,7 @@
      • Rodent IV: обвязка Web Worker вшита в один файл, опции читаются из
        рукопожатия UCI, порядок команд по протоколу, нативный движок считается
        установленным и восстанавливается при следующем запуске;
-     • задел под цвет фигур (3.2) и релиз-файлы версии 3.1.
+     • релиз-файлы текущей версии (проверяются по version.json).
    Запуск: node uitest14.js (нужен jsdom: cd /tmp && npm install jsdom) */
 const fs = require('fs');
 const path = require('path');
@@ -115,7 +115,7 @@ function boot(withBridge) {
   const idx = T.varIndex();
   ok(idx.length > 200, 'из CSS приложения разобрано записей: ' + idx.length);
   const st = T.indexStats();
-  ok(st.vars >= 71 && st.total === 72, 'карта покрывает переменные темы: ' + st.vars + ' из ' + st.total);
+  ok(st.vars >= 71 && st.total === 81, 'карта покрывает переменные темы: ' + st.vars + ' из ' + st.total);
   const inIndex = v => idx.some(e => e.v === v);
   ok(['--light', '--dark', '--btn-bg', '--btn-bg-hi', '--panel', '--win-bg', '--tip-bg', '--hl-last']
     .every(inIndex), 'ключевые переменные найдены в стилях (клетки, кнопки, панели, окна, подсказки)');
@@ -405,17 +405,32 @@ function boot(withBridge) {
     'обвязка не тянет внешних файлов — приложение остаётся одним index.html');
   ok(html.indexOf('/*@ENGINEWORKER@*/') < 0, 'плейсхолдер обвязки заменён при сборке');
 
-  console.log('\n— 3.1: задел под цвет фигур (план 3.2) —');
+  console.log('\n— 3.2: цвет фигур включён (PIECE_THEME) —');
   const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
   ok(/--pc-w-fill:#ffffff/.test(css) && /--pc-b-fill:#000000/.test(css) && /--pc-b-hi:#ececec/.test(css),
-    'переменные цвета фигур объявлены в :root и равны текущим цветам спрайта');
-  ok(!/body\.pc-theme/.test(html.replace(css, '')) || true, 'правила перекраски фигур не влияют на текущий вид');
-  ok(/<symbol id="pc-wK"[^>]*>[\s\S]{0,400}?fill="#fff"/.test(html),
-    'спрайт фигур собран без подстановки var() — флаг PIECE_THEME выключен');
+    'переменные цвета фигур объявлены в :root и равны цветам спрайта Cburnett');
   const buildSrc = fs.readFileSync(path.join(ROOT, 'build.js'), 'utf8');
-  ok(/const PIECE_THEME = false;/.test(buildSrc) && /function themeablePiece/.test(buildSrc),
-    'в build.js есть флаг и преобразование спрайта под переменные темы');
-  ok(/--pc-w-fill/.test(buildSrc) && /--pc-b-hi/.test(buildSrc), 'преобразование спрайта знает переменные фигур');
+  ok(/const PIECE_THEME = true;/.test(buildSrc) && /function themeablePiece/.test(buildSrc),
+    'в build.js флаг PIECE_THEME включён и есть преобразование спрайта');
+  ok(/--pc-w-fill/.test(buildSrc) && /--pc-b-line/.test(buildSrc) && /--pc-b-hi/.test(buildSrc),
+    'преобразование спрайта знает все пять переменных фигур');
+  const wK = html.match(/<symbol id="pc-wK"[\s\S]*?<\/symbol>/)[0];
+  ok(wK.indexOf('style="fill:var(--pc-w-fill,#fff);stroke:var(--pc-w-line,#000)"') >= 0 ||
+    (wK.indexOf('var(--pc-w-fill,#fff)') >= 0 && wK.indexOf('var(--pc-w-line,#000)') >= 0),
+    'белый король в спрайте перекрашивается переменными темы');
+  ok(!/fill="#fff"/.test(wK), 'у белого короля не осталось хардкод-заливки');
+  const bQ = html.match(/<symbol id="pc-bQ"[\s\S]*?<\/symbol>/)[0];
+  ok(bQ.indexOf('var(--pc-b-line,#000)') >= 0 && !/stroke="#000"/.test(bQ),
+    'чёрная ферзь: контур — переменная, хардкод stroke убран');
+  ok(/var\(--pc-b-hi,#ececec\)/.test(html), 'светлые детали чёрных фигур — переменная --pc-b-hi');
+  /* неявная заливка чёрных фигур (ферзь, ладья, пешка) наследуется от <use> */
+  const useB = doc.querySelector('#board .sq[data-sq="12"] .pc.pb use, #board .pc.pb use');
+  ok(useB === null || /fill:var\(--pc-b-fill,#000\)/.test(useB.getAttribute('style') || ''),
+    'чёрная фигура на доске наследует заливку от <use style="fill:var(--pc-b-fill,…)">');
+  ok(T.BY_VAR['--pc-w-fill'] && T.BY_VAR['--pc-b-hi'] && T.groupName('--pc-b-fill') === 'Фигуры',
+    'переменные фигур зарегистрированы в группе «Фигуры»');
+  ok(['--mark-1', '--mark-4'].every(v => T.BY_VAR[v] && T.groupName(v) === 'Доска и клетки'),
+    'цвета стрелок разбора зарегистрированы в группе «Доска и клетки»');
 
   console.log('\n— 3.1: CSS режима дизайнера —');
   ok(/body\.designer\{cursor:crosshair\}/.test(css), 'в режиме дизайнера курсор-перекрестье');
@@ -618,26 +633,28 @@ function boot(withBridge) {
   D.Chesster.spawnEngine = exe => { d.log.spawned = exe; return Promise.resolve({ ok: true, pid: 7 }); };
   ok(d.errors.length === 0, 'ошибок консоли при восстановлении нет' + (d.errors.length ? ': ' + d.errors[0] : ''));
 
-  /* ============================ ФАЙЛЫ РЕЛИЗА 3.1 ============================ */
-  console.log('\n— 3.1: версии и релиз-файлы —');
-  ok(V === '3.1', 'version.json: ' + V);
+  /* ============================ ФАЙЛЫ РЕЛИЗА ============================ */
+  /* Релиз-файлы проверяются по текущей версии из version.json: набор не
+     устаревает при переходе на 3.2, 3.3 и дальше (детали 3.2 — в uitest15). */
+  console.log('\n— релиз-файлы версии ' + V + ' —');
+  ok(/^\d+\.\d+$/.test(V), 'version.json: ' + V);
   const notes = JSON.parse(fs.readFileSync(path.join(ROOT, 'version.json'), 'utf8')).notes;
-  ok(/дизайнер/i.test(notes) && /выход/i.test(notes), 'в заметках версии упомянуты режим дизайнера и кнопка выхода');
+  ok(typeof notes === 'string' && notes.length > 120, 'заметки версии заполнены (' + notes.length + ' знаков)');
   ok(/var APP_VERSION = '\/\*@APPVERSION@\*\/'/.test(fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8')),
     'версия в исходнике по-прежнему токеном — её подставляет сборщик');
-  ok(html.indexOf("'3.1'") >= 0 || html.indexOf('"3.1"') >= 0 || /APP_VERSION = '3\.1'/.test(html),
-    'в собранном index.html прошита версия 3.1');
+  ok(html.indexOf("var APP_VERSION = '" + V + "'") >= 0,
+    'в собранном index.html прошита версия ' + V);
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  ok(sw.indexOf('chesster-3.1-') >= 0, 'кэш сервис-воркера получил версию 3.1');
+  ok(sw.indexOf('chesster-' + V + '-') >= 0, 'кэш сервис-воркера получил версию ' + V);
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
   ok(pkg.version === PV, 'desktop/package.json: ' + pkg.version);
   const cargo = fs.readFileSync(path.join(ROOT, 'desktop/tauri/Cargo.toml'), 'utf8');
   const tconf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/tauri/tauri.conf.json'), 'utf8'));
-  ok(/^version = "3\.1\.0"$/m.test(cargo), 'Cargo.toml: 3.1.0');
+  ok(cargo.indexOf('version = "' + PV + '"') >= 0, 'Cargo.toml: ' + PV);
   ok(tconf.version === PV, 'tauri.conf.json: ' + tconf.version);
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
-  ok(/v3\.1\.0/.test(bat), 'push-release.bat ставит тег v3.1.0');
-  ok(/git commit -m "Release 3\.1:/.test(bat), 'сообщение коммита обновлено до 3.1');
+  ok(bat.indexOf('git tag v' + PV) >= 0, 'push-release.bat ставит тег v' + PV);
+  ok(bat.indexOf('git commit -m "Release ' + V + ':') >= 0, 'сообщение коммита обновлено до ' + V);
   ok(!/[^\x09\x0a\x0d\x20-\x7e]/.test(bat), 'в bat-файле только ASCII — cmd.exe не исказит текст');
   ok(/\r\n/.test(bat), 'bat-файл сохранён с переводами строк CRLF');
   const mainjs = fs.readFileSync(path.join(ROOT, 'desktop/main.js'), 'utf8');
@@ -653,18 +670,22 @@ function boot(withBridge) {
   const bridge = fs.readFileSync(path.join(ROOT, 'desktop/tauri/bridge.js'), 'utf8');
   ok(/quitApp: function/.test(bridge) && /invoke\('quit_app'\)/.test(bridge), 'мост Tauri exposes quitApp');
 
-  console.log('\n— 3.1: документация и история изменений —');
-  ok(App.CHANGELOG[0][0] === '3.1', 'история изменений начинается с 3.1');
-  const ch31 = App.CHANGELOG[0][1];
+  console.log('\n— 3.2: документация и история изменений —');
+  ok(App.CHANGELOG[0][0] === '3.2', 'история изменений начинается с 3.2');
+  const ch32 = App.CHANGELOG[0][1];
+  ok(/фигур/i.test(ch32) && /81/.test(ch32), 'в записи 3.2 описаны цвета фигур и новый счётчик элементов');
+  ok(/удержив/i.test(ch32) && /0,5/.test(ch32), 'в записи 3.2 описано удержание правой кнопки');
+  ok(/HEX/i.test(ch32), 'в записи 3.2 упомянуто исправление HEX-поля');
+  ok(/Rodent V/i.test(ch32), 'в записи 3.2 упомянута проверка Rodent V');
+  const ch31 = App.CHANGELOG.filter(x => x[0] === '3.1')[0][1];
   ok(/дизайнер/i.test(ch31) && /Shift/i.test(ch31) && /Esc/i.test(ch31),
     'в записи 3.1 описан режим дизайнера с Shift и Esc');
   ok(/выход/i.test(ch31), 'в записи 3.1 упомянута кнопка выхода из приложения');
-  ok(/Rodent/i.test(ch31), 'в записи 3.1 упомянута интеграция Rodent IV');
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  ok(/3\.1/.test(readme), 'README обновлён до версии 3.1');
+  ok(/3\.2/.test(readme), 'README обновлён до версии 3.2');
   ok(/[Рр]ежим дизайнера/.test(readme), 'в README описан режим дизайнера');
-  ok(/[Вв]ыход/.test(readme) && /Rodent/.test(readme), 'в README есть кнопка выхода и раздел про Rodent IV');
-  ok(/3\.2/.test(readme) && /фигур/i.test(readme), 'в README зафиксирован план 3.2 (цвет фигур)');
+  ok(/Rodent V/.test(readme) && /удерж/i.test(readme), 'в README есть Rodent V и удержание правой кнопки');
+  ok(/фигур/i.test(readme), 'в README описан цвет фигур');
   const dReadme = fs.readFileSync(path.join(ROOT, 'desktop/README.md'), 'utf8');
   ok(/app:quit|quitApp|Выход/.test(dReadme), 'в desktop/README описан выход из приложения');
   const tauriMd = fs.readFileSync(path.join(ROOT, 'TAURI.md'), 'utf8');

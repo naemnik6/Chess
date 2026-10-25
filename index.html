@@ -50,12 +50,16 @@
   --playback-bg:linear-gradient(180deg,#2a2140,#1d1730); --playback-line:#4b3d75; --playback-text:#dccfff;
   --qbar-bg:#0e1322; --qbar-line:#26304f;
   --arch-text:#c0aef5;
-  /* задел под настройку цвета фигур (план 3.2): значения в точности равны
-     цветам спрайта Cburnett, а правила, которые их применяют, включаются
-     только классом body.pc-theme и сборочным флагом PIECE_THEME в build.js.
-     Поэтому сейчас вид фигур не меняется — переменные просто уже на месте. */
+  /* цвета фигур (3.2): значения в точности равны цветам спрайта Cburnett,
+     поэтому включение не меняет классический вид. Спрайт собирается build.js
+     с флагом PIECE_THEME: явные fill/stroke фигур заменяются на var(--pc-*),
+     а неявная заливка (чёрные ферзь, ладья, пешка) наследуется от <use>,
+     которому app.js задаёт fill:var(--pc-b-fill). */
   --pc-w-fill:#ffffff; --pc-w-line:#000000;
   --pc-b-fill:#000000; --pc-b-line:#000000; --pc-b-hi:#ececec;
+  /* стрелки и круги правой кнопки мыши (3.2): четыре чередующихся цвета,
+     значения равны прежним хардкод-цветам app.js — вид не меняется */
+  --mark-1:#3aa0ff; --mark-2:#ffb02e; --mark-3:#ff5f5f; --mark-4:#57d97a;
   --r:12px;
 }
 *{box-sizing:border-box}
@@ -222,6 +226,15 @@ main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:n
   background:radial-gradient(circle at 50% 50%, transparent 30%, var(--hl-check1) 62%, var(--hl-check2) 100%);
   animation:checkPulse 1.5s ease-in-out infinite}
 @keyframes checkPulse{0%,100%{opacity:.82}50%{opacity:1}}
+/* индикатор удержания правой кнопки (3.2): золотое кольцо нарастает ровно
+   столько, сколько нужно держать кнопку, чтобы открыть выбор цвета меток.
+   Без !important — иначе анимация не сможет погаснуть (урок .flash-var). */
+.sq.hold-ring::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:2px;z-index:4;
+  animation:holdRing .5s linear forwards}
+@keyframes holdRing{
+  from{box-shadow:inset 0 0 0 0 rgba(242,193,78,0);opacity:.4}
+  to{box-shadow:inset 0 0 0 4px var(--gold,#f2c14e);opacity:.95}
+}
 .board.locked .sq{cursor:default}
 
 /* стрелки правой кнопкой мыши */
@@ -674,7 +687,10 @@ body.desktop .set-scroll{padding:18px 22px 24px}
 .cp-row input[type=range]::-moz-range-track{height:10px;border-radius:6px;border:1px solid var(--line);background:var(--cp-track,#2a3050)}
 .cp-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #22273c}
 .cp-num{flex:0 0 46px;text-align:right;font-size:11.4px;color:var(--text);font-variant-numeric:tabular-nums}
-.cp-hex{width:112px;flex:0 0 auto}
+/* Специальность выше, чем у базового input.inp{width:100%}: иначе HEX-поле
+   растягивалось на всю строку и вылезало за правый край окна (3.2). */
+input.inp.cp-hex{width:112px;flex:0 1 112px;min-width:76px}
+.cp-row.hexrow .cp-target-hint{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-stops{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
 .cp-stop{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--ctl-bg);
   color:var(--text);border-radius:9px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
@@ -759,7 +775,7 @@ body.picker-open .set-bg.on{opacity:.15}
 </style>
 </head>
 <body>
-<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false"><symbol id="pc-wK" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linejoin="miter" d="M22.5 11.63V6M20 8h5"/><path fill="#fff" stroke-linecap="butt" stroke-linejoin="miter" d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path fill="#fff" d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0"/></g></symbol><symbol id="pc-wQ" viewBox="0 0 45 45"><g fill="#fff" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M8 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0m16.5-4.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M41 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0M16 8.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M33 9a2 2 0 1 1-4 0 2 2 0 1 1 4 0"/><path stroke-linecap="butt" d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14z"/><path stroke-linecap="butt" d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path fill="none" d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0"/></g></symbol><symbol id="pc-wR" viewBox="0 0 45 45"><g fill="#fff" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linecap="butt" d="M9 39h27v-3H9zm3-3v-4h21v4zm-1-22V9h4v2h5V9h5v2h5V9h4v5"/><path d="m34 14-3 3H14l-3-3"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M31 17v12.5H14V17"/><path d="m31 29.5 1.5 2.5h-20l1.5-2.5"/><path fill="none" stroke-linejoin="miter" d="M11 14h23"/></g></symbol><symbol id="pc-wB" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g fill="#fff" stroke-linecap="butt"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.35.49-2.32.47-3-.5 1.35-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path stroke-linejoin="miter" d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5"/></g></symbol><symbol id="pc-wN" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path fill="#fff" d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path fill="#fff" d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><path fill="#000" d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0m5.433-9.75a.5 1.5 30 1 1-.866-.5.5 1.5 30 1 1 .866.5"/></g></symbol><symbol id="pc-wP" viewBox="0 0 45 45"><path fill="#fff" stroke="#000" stroke-linecap="round" stroke-width="1.5" d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z"/></symbol><symbol id="pc-bK" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linejoin="miter" d="M22.5 11.6V6"/><path fill="#000" stroke-linecap="butt" stroke-linejoin="miter" d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path fill="#000" d="M11.5 37a22.3 22.3 0 0 0 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10z"/><path stroke-linejoin="miter" d="M20 8h5"/><path stroke="#ececec" d="M32 29.5s8.5-4 6-9.7C34.1 14 25 18 22.5 24.6v2.1-2.1C20 18 9.9 14 7 19.9c-2.5 5.6 4.8 9 4.8 9"/><path stroke="#ececec" d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0"/></g></symbol><symbol id="pc-bQ" viewBox="0 0 45 45"><g fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g stroke="none"><circle cx="6" cy="12" r="2.75"/><circle cx="14" cy="9" r="2.75"/><circle cx="22.5" cy="8" r="2.75"/><circle cx="31" cy="9" r="2.75"/><circle cx="39" cy="12" r="2.75"/></g><path stroke-linecap="butt" d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5z"/><path stroke-linecap="butt" d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path fill="none" stroke-linecap="butt" d="M11 38.5a35 35 1 0 0 23 0"/><path fill="none" stroke="#ececec" d="M11 29a35 35 1 0 1 23 0m-21.5 2.5h20m-21 3a35 35 1 0 0 22 0m-23 3a35 35 1 0 0 24 0"/></g></symbol><symbol id="pc-bR" viewBox="0 0 45 45"><g fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linecap="butt" d="M9 39h27v-3H9zm3.5-7 1.5-2.5h17l1.5 2.5zm-.5 4v-4h21v4z"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M14 29.5v-13h17v13z"/><path stroke-linecap="butt" d="M14 16.5 11 14h23l-3 2.5zM11 14V9h4v2h5V9h5v2h5V9h4v5z"/><path fill="none" stroke="#ececec" stroke-linejoin="miter" stroke-width="1" d="M12 35.5h21m-20-4h19m-18-2h17m-17-13h17M11 14h23"/></g></symbol><symbol id="pc-bB" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g fill="#000" stroke-linecap="butt"><path d="M9 36c3.4-1 10.1.4 13.5-2 3.4 2.4 10.1 1 13.5 2 0 0 1.6.5 3 2-.7 1-1.6 1-3 .5-3.4-1-10.1.5-13.5-1-3.4 1.5-10.1 0-13.5 1-1.4.5-2.3.5-3-.5 1.4-2 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path stroke="#ececec" stroke-linejoin="miter" d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5"/></g></symbol><symbol id="pc-bN" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path fill="#000" d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path fill="#000" d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.04-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-1-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-2 2.5-3c1 0 1 3 1 3"/><path fill="#ececec" stroke="#ececec" d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0m5.43-9.75a.5 1.5 30 1 1-.86-.5.5 1.5 30 1 1 .86.5"/><path fill="#ececec" stroke="none" d="m24.55 10.4-.45 1.45.5.15c3.15 1 5.65 2.49 7.9 6.75S35.75 29.06 35.25 39l-.05.5h2.25l.05-.5c.5-10.06-.88-16.85-3.25-21.34s-5.79-6.64-9.19-7.16z"/></g></symbol><symbol id="pc-bP" viewBox="0 0 45 45"><path stroke="#000" stroke-linecap="round" stroke-width="1.5" d="M22.5 9a4 4 0 0 0-3.22 6.38 6.48 6.48 0 0 0-.87 10.65c-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47a6.46 6.46 0 0 0-.87-10.65A4.01 4.01 0 0 0 22.5 9z"/></symbol></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false"><symbol id="pc-wK" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-w-line,#000)"><path stroke-linejoin="miter" d="M22.5 11.63V6M20 8h5"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5" style="fill:var(--pc-w-fill,#fff)"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10z" style="fill:var(--pc-w-fill,#fff)"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0"/></g></symbol><symbol id="pc-wQ" viewBox="0 0 45 45"><g fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="fill:var(--pc-w-fill,#fff);stroke:var(--pc-w-line,#000)"><path d="M8 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0m16.5-4.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M41 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0M16 8.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M33 9a2 2 0 1 1-4 0 2 2 0 1 1 4 0"/><path stroke-linecap="butt" d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14z"/><path stroke-linecap="butt" d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path fill="none" d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0"/></g></symbol><symbol id="pc-wR" viewBox="0 0 45 45"><g fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="fill:var(--pc-w-fill,#fff);stroke:var(--pc-w-line,#000)"><path stroke-linecap="butt" d="M9 39h27v-3H9zm3-3v-4h21v4zm-1-22V9h4v2h5V9h5v2h5V9h4v5"/><path d="m34 14-3 3H14l-3-3"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M31 17v12.5H14V17"/><path d="m31 29.5 1.5 2.5h-20l1.5-2.5"/><path fill="none" stroke-linejoin="miter" d="M11 14h23"/></g></symbol><symbol id="pc-wB" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-w-line,#000)"><g stroke-linecap="butt" style="fill:var(--pc-w-fill,#fff)"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.35.49-2.32.47-3-.5 1.35-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path stroke-linejoin="miter" d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5"/></g></symbol><symbol id="pc-wN" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-w-line,#000)"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21" style="fill:var(--pc-w-fill,#fff)"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3" style="fill:var(--pc-w-fill,#fff)"/><path d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0m5.433-9.75a.5 1.5 30 1 1-.866-.5.5 1.5 30 1 1 .866.5" style="fill:var(--pc-w-line,#000)"/></g></symbol><symbol id="pc-wP" viewBox="0 0 45 45"><path stroke-linecap="round" stroke-width="1.5" d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" style="fill:var(--pc-w-fill,#fff);stroke:var(--pc-w-line,#000)"/></symbol><symbol id="pc-bK" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-b-line,#000)"><path stroke-linejoin="miter" d="M22.5 11.6V6"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5" style="fill:var(--pc-b-fill,#000)"/><path d="M11.5 37a22.3 22.3 0 0 0 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10z" style="fill:var(--pc-b-fill,#000)"/><path stroke-linejoin="miter" d="M20 8h5"/><path d="M32 29.5s8.5-4 6-9.7C34.1 14 25 18 22.5 24.6v2.1-2.1C20 18 9.9 14 7 19.9c-2.5 5.6 4.8 9 4.8 9" style="stroke:var(--pc-b-hi,#ececec)"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" style="stroke:var(--pc-b-hi,#ececec)"/></g></symbol><symbol id="pc-bQ" viewBox="0 0 45 45"><g fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-b-line,#000)"><g stroke="none"><circle cx="6" cy="12" r="2.75"/><circle cx="14" cy="9" r="2.75"/><circle cx="22.5" cy="8" r="2.75"/><circle cx="31" cy="9" r="2.75"/><circle cx="39" cy="12" r="2.75"/></g><path stroke-linecap="butt" d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5z"/><path stroke-linecap="butt" d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path fill="none" stroke-linecap="butt" d="M11 38.5a35 35 1 0 0 23 0"/><path fill="none" d="M11 29a35 35 1 0 1 23 0m-21.5 2.5h20m-21 3a35 35 1 0 0 22 0m-23 3a35 35 1 0 0 24 0" style="stroke:var(--pc-b-hi,#ececec)"/></g></symbol><symbol id="pc-bR" viewBox="0 0 45 45"><g fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-b-line,#000)"><path stroke-linecap="butt" d="M9 39h27v-3H9zm3.5-7 1.5-2.5h17l1.5 2.5zm-.5 4v-4h21v4z"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M14 29.5v-13h17v13z"/><path stroke-linecap="butt" d="M14 16.5 11 14h23l-3 2.5zM11 14V9h4v2h5V9h5v2h5V9h4v5z"/><path fill="none" stroke-linejoin="miter" stroke-width="1" d="M12 35.5h21m-20-4h19m-18-2h17m-17-13h17M11 14h23" style="stroke:var(--pc-b-hi,#ececec)"/></g></symbol><symbol id="pc-bB" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-b-line,#000)"><g stroke-linecap="butt" style="fill:var(--pc-b-fill,#000)"><path d="M9 36c3.4-1 10.1.4 13.5-2 3.4 2.4 10.1 1 13.5 2 0 0 1.6.5 3 2-.7 1-1.6 1-3 .5-3.4-1-10.1.5-13.5-1-3.4 1.5-10.1 0-13.5 1-1.4.5-2.3.5-3-.5 1.4-2 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path stroke-linejoin="miter" d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5" style="stroke:var(--pc-b-hi,#ececec)"/></g></symbol><symbol id="pc-bN" viewBox="0 0 45 45"><g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" style="stroke:var(--pc-b-line,#000)"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21" style="fill:var(--pc-b-fill,#000)"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.04-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-1-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-2 2.5-3c1 0 1 3 1 3" style="fill:var(--pc-b-fill,#000)"/><path d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0m5.43-9.75a.5 1.5 30 1 1-.86-.5.5 1.5 30 1 1 .86.5" style="fill:var(--pc-b-hi,#ececec);stroke:var(--pc-b-hi,#ececec)"/><path stroke="none" d="m24.55 10.4-.45 1.45.5.15c3.15 1 5.65 2.49 7.9 6.75S35.75 29.06 35.25 39l-.05.5h2.25l.05-.5c.5-10.06-.88-16.85-3.25-21.34s-5.79-6.64-9.19-7.16z" style="fill:var(--pc-b-hi,#ececec)"/></g></symbol><symbol id="pc-bP" viewBox="0 0 45 45"><path stroke-linecap="round" stroke-width="1.5" d="M22.5 9a4 4 0 0 0-3.22 6.38 6.48 6.48 0 0 0-.87 10.65c-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47a6.46 6.46 0 0 0-.87-10.65A4.01 4.01 0 0 0 22.5 9z" style="stroke:var(--pc-b-line,#000)"/></symbol></svg>
 
 <noscript><div style="padding:24px;text-align:center;font:16px sans-serif;color:#e9ecfa;background:#131a33">Для игры в шахматы нужно включить JavaScript.</div></noscript>
 
@@ -1079,29 +1095,32 @@ body.picker-open .set-bg.on{opacity:.15}
         <div class="engine-list" id="engineList"></div>
         <div class="engine-detail" id="engineDetail"></div>
 
-        <div class="lbl" style="margin-top:14px">Rodent IV</div>
+        <div class="lbl" style="margin-top:14px">Rodent IV / Rodent V</div>
         <div class="arch-info" id="rodentInfo"></div>
         <div class="engine-drop" id="rodentDrop">
           <div class="ed-ic">🧩</div>
           <div class="ed-txt">
-            Добавьте свою сборку Rodent IV для браузера (WASM/asm.js с UCI-интерфейсом).
-            Файл сохранится локально в этом устройстве — в IndexedDB, отдельно от архива партий.
+            Браузер: добавьте свою сборку движка в WebAssembly/asm.js с UCI-интерфейсом —
+            один файл .wasm или .js (архив распакуйте заранее). Файл сохранится локально
+            в этом устройстве — в IndexedDB, отдельно от архива партий.
+            В версии для компьютера архивы не нужны: распакуйте их в папку и нажмите «🖥 Выбрать exe…».
           </div>
-          <input type="file" id="rodentFile" accept=".wasm,.js,.zip,application/wasm,application/javascript" aria-label="Файл движка Rodent IV">
+          <input type="file" id="rodentFile" accept=".wasm,.js,application/wasm,application/javascript" aria-label="Файл движка Rodent (WASM/asm.js)">
           <div class="hint" id="rodentProgress"></div>
         </div>
         <div class="btns3" style="margin-top:8px">
-          <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
-          <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent IV активным движком компьютера">▶ Использовать</button>
+          <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent V или IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
+          <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent активным движком компьютера">▶ Использовать</button>
           <button class="btn btn-mini" id="btnRodentTest" data-tip="Запустить движок и проверить, что он отвечает на UCI">🔌 Проверить</button>
           <button class="btn btn-mini danger" id="btnRodentDel" data-tip="Удалить файл движка из хранилища">🗑 Удалить</button>
         </div>
         <div class="set-actions" style="margin-top:10px">
-          <button class="btn btn-mini" id="btnRodentSite" data-tip="Открыть страницу загрузки Rodent IV (сайт автора, пакет FinalRodent.7z)">↗ Страница загрузки</button>
-          <button class="btn btn-mini" id="btnRodentRepo" data-tip="Открыть репозиторий Rodent IV на GitHub: исходники, exe и сборки для macOS">↗ Репозиторий GitHub</button>
+          <button class="btn btn-mini" id="btnRodentV" data-tip="Открыть релизы Rodent V на GitHub: архив release-1-2.zip с exe, нейросетями, книгами и «личностями»">↗ Rodent V (релизы)</button>
+          <button class="btn btn-mini" id="btnRodentSite" data-tip="Открыть страницу загрузки Rodent IV (сайт автора, пакет FinalRodent.7z)">↗ Страница загрузки IV</button>
+          <button class="btn btn-mini" id="btnRodentRepo" data-tip="Открыть репозиторий Rodent IV на GitHub: исходники, exe и сборки для macOS">↗ Репозиторий IV</button>
         </div>
         <details class="quota-help" style="margin-top:2px" open>
-          <summary>Что нужно, чтобы Rodent IV заработал здесь</summary>
+          <summary>Что нужно, чтобы Rodent заработал здесь</summary>
           <div class="hint" id="rodentHelp"></div>
         </details>
       </section>
@@ -1155,7 +1174,7 @@ body.picker-open .set-bg.on{opacity:.15}
 <div id="designerHl" aria-hidden="true"><span id="designerHlTag"></span></div>
 <div class="dhud" id="designerHud" role="status" aria-live="polite" hidden>
   <span class="dhud-ic" aria-hidden="true">🖌</span>
-  <span class="dhud-txt"><b>Режим дизайнера</b>клик — выбрать цвет элемента · левый Shift+клик — обычное действие · Esc — выход</span>
+  <span class="dhud-txt"><b>Режим дизайнера</b>клик — выбрать цвет элемента · левый Shift+клик — обычное действие · удержание правой кнопки на клетке доски (~0,5 с) — цвет стрелок и меток · Esc — выход</span>
   <span class="dhud-el" id="designerTarget">наведите курсор на элемент</span>
   <span class="dhud-btns">
     <button class="btn btn-mini" id="btnDesignerUndo" data-tip="Вернуть наведённому элементу цвета по умолчанию">↺ Сбросить элемент</button>
@@ -2348,9 +2367,9 @@ body.picker-open .set-bg.on{opacity:.15}
 </script>
 <script>
 /* =========================================================================
-   Модуль цветовой темы (Theme) — версия 3.1.
+   Модуль цветовой темы (Theme) — версия 3.2.
    Даёт пользователю полный контроль над палитрой приложения:
-     • реестр THEME-переменных (72 элемента интерфейса и доски), каждая —
+     • реестр THEME-переменных (81 элемент интерфейса и доски), каждая —
        CSS-переменная из :root; значения по умолчанию точно совпадают
        с классическим оформлением, поэтому «из коробки» вид не меняется;
      • HSL-пипетка с палитрой, HEX-полем, прозрачностью и градиентами
@@ -2414,6 +2433,11 @@ body.picker-open .set-bg.on{opacity:.15}
     '--hl-cap': 'rgba(220,40,40,.55)',
     '--hl-check1': 'rgba(232,45,45,.55)', '--hl-check2': 'rgba(196,12,12,.92)',
     '--pc-shadow': 'rgba(0,0,0,.35)',
+    /* стрелки и круги правой кнопки (3.2): четыре чередующихся цвета */
+    '--mark-1': '#3aa0ff', '--mark-2': '#ffb02e', '--mark-3': '#ff5f5f', '--mark-4': '#57d97a',
+    /* фигуры (3.2): значения в точности равны цветам спрайта Cburnett */
+    '--pc-w-fill': '#ffffff', '--pc-w-line': '#000000',
+    '--pc-b-fill': '#000000', '--pc-b-line': '#000000', '--pc-b-hi': '#ececec',
     /* подсказки, текст поверх акцентов, «опасные» действия и особые элементы */
     '--tip-bg': '#0a0d1a', '--tip-line': '#454f80', '--tip-text': '#e9ecfa',
     '--on-primary': '#0a1024', '--on-sel': '#ffffff',
@@ -2494,7 +2518,20 @@ body.picker-open .set-bg.on{opacity:.15}
         { v: '--hl-cap', n: 'Кольцо взятия' },
         { v: '--hl-check1', n: 'Шах — серединное кольцо' },
         { v: '--hl-check2', n: 'Шах — край кольца' },
-        { v: '--pc-shadow', n: 'Тень фигур' }
+        { v: '--pc-shadow', n: 'Тень фигур' },
+        { v: '--mark-1', n: 'Стрелки и метки — цвет 1' },
+        { v: '--mark-2', n: 'Стрелки и метки — цвет 2' },
+        { v: '--mark-3', n: 'Стрелки и метки — цвет 3' },
+        { v: '--mark-4', n: 'Стрелки и метки — цвет 4' }
+      ]
+    },
+    {
+      id: 'pieces', name: 'Фигуры', items: [
+        { v: '--pc-w-fill', n: 'Белые фигуры — заливка' },
+        { v: '--pc-w-line', n: 'Белые фигуры — контур и детали' },
+        { v: '--pc-b-fill', n: 'Чёрные фигуры — заливка' },
+        { v: '--pc-b-line', n: 'Чёрные фигуры — контур' },
+        { v: '--pc-b-hi', n: 'Чёрные фигуры — светлые детали' }
       ]
     },
     {
@@ -3775,7 +3812,7 @@ body.picker-open .set-bg.on{opacity:.15}
    Сегодня: встроенный JS-бот (негамакс + альфа-бета) — работает везде,
    ничего не скачивает.
 
-   Задел на будущее: внешние UCI-движки, в первую очередь Rodent IV.
+   Задел на будущее: внешние UCI-движки, в первую очередь Rodent IV и Rodent V.
    Для них уже prepared всё, кроме самого бинарника:
      • каталог движков в хранилище (IndexedDB, а не localStorage — архив
        партий и движки не должны бороться за одно место);
@@ -3783,11 +3820,15 @@ body.picker-open .set-bg.on{opacity:.15}
      • транспорт (Web Worker + WASM/asm.js + polyfill Node для UCI-сборок);
      • протокол UCI поверх postMessage: uci/isready/ucinewgame/position/go/stop;
      • настройка уровня через ограниченные глубину/узлы/время и MultiPV,
-       а для Rodent IV — ещё и через его собственные personality-параметры.
+       а для Rodent — ещё и через его собственные personality-параметры
+       (у Rodent V это PersonalityFile, UCI_LimitStrength и UCI_Elo).
 
-   Rodent IV распространяется как Windows-исполняемый файл с собственным
-   лицензионным соглашением, поэтому в веб-сборку он не вкладывается:
-   пользователь добавляет свою копию, а приложение хранит её локально.
+   Rodent распространяется как исполняемый файл (GPL), поэтому в веб-сборку
+   он не вкладывается: пользователь добавляет свою копию, а приложение хранит
+   её локально. Rodent V (2026, на Go, NNUE, ~3400 CCRL) проверялся живым
+   рукопожатием: id name / 9 опций / info / bestmove — формат строк тот же,
+   что у Rodent IV, разбор протокола общий. Рабочая папка процесса — папка
+   exe, поэтому соседние подпапки personalities/nets/books движок находит сам.
    ========================================================================= */
 (function (root, factory) {
   var isNode = typeof module === 'object' && module.exports;
@@ -3818,33 +3859,43 @@ body.picker-open .set-bg.on{opacity:.15}
     },
     {
       id: 'rodent4',
-      name: 'Rodent IV',
+      name: 'Rodent IV / V',
       kind: 'uci',
       available: false,          /* появится, когда пользователь добавит свою сборку */
       bundled: false,
-      strength: '~2600-3000 Elo (зависит от сборки и «личности»)',
-      about: 'Сильный открытый движок Pawła Koziol. Для запуска в браузере нужна сборка, ' +
-        'скомпилированная в WebAssembly или asm.js и работающая в Web Worker. В веб-версию ' +
-        'движок не вкладывается: добавьте свой файл — он сохранится локально в этом устройстве ' +
-        '(IndexedDB), никуда не отправляется и не занимает место архива партий.',
-      homepage: 'http://rodentchess.blogspot.com/',
+      strength: 'IV: ~2600-3000 Elo · V: ~3400-3470 Elo (CCRL, зависит от «личности»)',
+      about: 'Открытые движки Павла Козёля (GPL): Rodent IV и его продолжение Rodent V (на Go, ' +
+        'с нейросетевой оценкой NNUE, ~3400 Elo). Оба говорят по протоколу UCI, поэтому ' +
+        'подключаются одинаково: в десктопе — исполняемый файл (процесс поднимает обёртка, ' +
+        'рабочая папка — папка движка, поэтому соседние personalities/nets/books он находит сам); ' +
+        'в браузере — сборка, скомпилированная в WebAssembly/asm.js. Rodent V выходит только ' +
+        'исполняемым файлом — веб-сборки у него нет. В приложение движок не вложен: вы добавляете ' +
+        'свою копию, она остаётся на вашем устройстве (IndexedDB или путь к exe) и никуда не отправляется.',
+      homepage: 'https://github.com/nescitus/Rodent-V',
       /* что именно ждём от пользователя */
       accepts: [
-        { ext: '.wasm', label: 'сборка Rodent IV в WebAssembly' },
-        { ext: '.js', label: 'asm.js-сборка с UCI-интерфейсом' },
-        { ext: '.zip', label: 'архив со сборкой и файлом движка' }
+        { ext: '.wasm', label: 'сборка движка в WebAssembly (браузер)' },
+        { ext: '.js', label: 'asm.js-сборка с UCI-интерфейсом (браузер)' },
+        { ext: '.exe', label: 'исполняемый файл Rodent IV или V (десктоп)' }
       ],
-      /* UCI-опции, которыми настраивается сила и стиль Rodent IV */
+      /* UCI-опции, которыми настраиваются сила и стиль. Список — запасной:
+         настоящие опции читаются из рукопожатия uciok. Здесь типовые имена
+         обоих поколений: PersonalityFile есть и у IV, и у V; UCI_LimitStrength
+         и UCI_Elo (800…3000) появились в Rodent V 1.1+. */
       uciOptions: [
         { name: 'DepthLimit', type: 'spin', min: 1, max: 40, label: 'Ограничение глубины' },
         { name: 'NodeLimit', type: 'spin', min: 0, max: 100000000, label: 'Ограничение по узлам' },
         { name: 'MoveTime', type: 'spin', min: 0, max: 60000, label: 'Время на ход, мс' },
         { name: 'MultiPV', type: 'spin', min: 1, max: 8, label: 'Число вариантов (MultiPV)' },
         { name: 'Personality', type: 'combo', label: 'Стиль игры (личность)' },
+        { name: 'PersonalityFile', type: 'string', label: 'Файл «личности» (Rodent V)' },
+        { name: 'UCI_LimitStrength', type: 'check', label: 'Ограничить силу (Rodent V)' },
+        { name: 'UCI_Elo', type: 'spin', min: 800, max: 3000, label: 'Уровень Elo (Rodent V)' },
         { name: 'Threads', type: 'spin', min: 1, max: 16, label: 'Потоки' },
         { name: 'Hash', type: 'spin', min: 1, max: 1024, label: 'Хэш, МБ' }
       ],
-      /* готовые пресеты под наши уровни, чтобы переключение было привычным */
+      /* готовые пресеты под наши уровни, чтобы переключение было привычным.
+         Это параметры команды go — их понимает любой UCI-движок, и IV, и V */
       presets: {
         easy: { DepthLimit: 3, MoveTime: 400, MultiPV: 1 },
         medium: { DepthLimit: 8, MoveTime: 1500, MultiPV: 1 },
@@ -3865,6 +3916,7 @@ body.picker-open .set-bg.on{opacity:.15}
     installed: {},        /* id -> {size, added, name, note, native?, path?} */
     options: {},          /* id -> {опция: значение} */
     detected: {},         /* id -> опции, которые движок сам назвал при рукопожатии */
+    idInfo: {},           /* id -> {name, author}: как движок представился (id name / id author) */
     worker: null,
     native: false,
     ready: false,
@@ -4038,6 +4090,15 @@ body.picker-open .set-bg.on{opacity:.15}
   function handleUciLine(line) {
     line = String(line || '').trim();
     if (!line) return;
+    /* движок представляется сам: «id name Rodent V 1.2 AVX2», «id author …».
+       Имя показываем в карточке — сразу видно, какое поколение подключено (3.2) */
+    var idm = /^id\s+(name|author)\s+(.+)$/i.exec(line);
+    if (idm) {
+      var slot = state.idInfo[state.active] || (state.idInfo[state.active] = {});
+      slot[idm[1].toLowerCase()] = idm[2].trim();
+      emit('status', { log: line });
+      return;
+    }
     if (/^option\s+name\s+/i.test(line)) {
       var op = parseUciOption(line);
       if (op) {
@@ -4081,6 +4142,9 @@ body.picker-open .set-bg.on{opacity:.15}
 
   /* опции, которые движок назвал сам (пусто, если рукопожатия ещё не было) */
   function detectedOptions(id) { return (state.detected[id || state.active] || []).slice(); }
+
+  /* как движок представился при рукопожатии: {name, author} или null */
+  function engineIdentity(id) { return state.idInfo[id || state.active] || null; }
 
   /* (пере)послать параметры UCI: делается перед первым поиском и после смены
      пресета, а не на каждом ходу — движки этого не любят */
@@ -4128,6 +4192,7 @@ body.picker-open .set-bg.on{opacity:.15}
       state.needNewGame = true;
       state.optsDirty = true;
       state.detected[id] = [];
+      state.idInfo[id] = null;
       w.onmessage = function (e) {
         var d = e.data || {};
         if (d.type === 'ready') { state.ready = true; emit('status', { ready: true, id: id }); }
@@ -4178,6 +4243,7 @@ body.picker-open .set-bg.on{opacity:.15}
       state.needNewGame = true;
       state.optsDirty = true;
       state.detected.rodent4 = [];
+      state.idInfo.rodent4 = null;
       if (!state.nativeWired) {
         state.nativeWired = true;
         P.onEngineLine(handleUciLine);
@@ -4336,6 +4402,7 @@ body.picker-open .set-bg.on{opacity:.15}
     /* нативный движок (исполняемый файл обёртки) и опции из рукопожатия UCI */
     isNative: isNative, nativePath: nativePath, registerNative: registerNative,
     detectedOptions: detectedOptions, parseUciOption: parseUciOption, newGame: newGame,
+    engineIdentity: engineIdentity, handleUciLine: handleUciLine,
     searchMove: searchMove, stopSearch: stopSearch,
     activeId: activeId, setActive: setActive, status: status
   };
@@ -4351,8 +4418,8 @@ body.picker-open .set-bg.on{opacity:.15}
   'use strict';
 
   /* версия прошивается сборщиком из version.json */
-  var APP_VERSION = '3.1';
-  var BUILD_STAMP = '2026-10-22';
+  var APP_VERSION = '3.2';
+  var BUILD_STAMP = '2026-10-25';
 
   var C = window.Chess;
   var Bot = window.ChessBot;
@@ -4379,10 +4446,10 @@ body.picker-open .set-bg.on{opacity:.15}
     thinking: false, gen: 0,
     tab: 'moves',
     openEngine: null,     /* раскрытая карточка движка */
-    /* JS-обвязка потока для внешнего UCI-движка (Rodent IV в WASM): сборщик
+    /* JS-обвязка потока для внешнего UCI-движка (Rodent в WASM): сборщик
        заменяет весь этот строковый литерал на текст desktop/rodent4-worker.js,
        поэтому приложение остаётся одним файлом и запускает движок без интернета */
-    workerSource: "/* =========================================================================\n   Шаблон JS-обвязки для запуска Rodent IV (или любого UCI-движка,\n   собранного в WASM/asm.js) внутри Web Worker браузера.\n\n   С версии 3.1 этот файл вшивается в index.html сборщиком: build.js подставляет\n   его текст вместо служебного токена ENGINEWORKER в src/app.js (поле\n   G.workerSource), поэтому приложение остаётся одним файлом и запускает\n   движок без интернета и без соседних файлов.\n\n   Это НЕ готовый движок, а контракт соединения. Родные сборки Rodent IV —\n   это исполняемые файлы Windows/Linux; чтобы они работали в браузере, их\n   компилируют в WebAssembly/asm.js (Emscripten) с подменой stdio. Данная\n   обвязка ожидает от такой сборки минимальный контракт:\n\n     модуль экспортирует:\n       init()                 — подготовка движка;\n       command(strPtr)        или  commandLine(str)  — подать строку UCI;\n     модуль импортирует:\n       send_line(ptr, len)    — отдать строку ответа UCI наружу.\n\n   Если ваша сборка использует WASI-stdio, замените подменю ввода-вывода\n   на pipes: обвязка ниже показывает, где именно.\n\n   Поток сообщений с приложением (Engines.start передаёт workerSource):\n     <- { type: 'init', engine: ArrayBuffer }   бинарник движка\n     <- { type: 'uci',  line: 'position fen …' } строка UCI от приложения\n     -> { type: 'ready' }                       движок ответил uciok + isready\n     -> { type: 'info', depth, score, nodes }   строки info depth …\n     -> { type: 'bestmove', move: 'e2e4' }      ход\n     -> { type: 'log', line }                   прочий вывод для журнала\n     -> { type: 'error', message }              сбой\n   ========================================================================= */\n'use strict';\n\nlet postLine = null;          // функция модуля для отправки строки наружу\nlet engineReady = false;\nlet commandLine = null;       // функция модуля для подачи строки UCI\n\nfunction decode(bytes) {\n  try { return new TextDecoder('utf-8').decode(bytes); } catch (e) { return ''; }\n}\nfunction encode(str) {\n  return new TextEncoder().encode(str + '\\n');\n}\n\n/* разбор строки UCI, пришедшей от движка */\nfunction handleEngineLine(line) {\n  line = String(line).trim();\n  if (!line) return;\n  if (line === 'uciok') { post({ type: 'log', line }); return; }\n  if (line === 'readyok') { engineReady = true; post({ type: 'ready' }); return; }\n  if (line.indexOf('bestmove') === 0) {\n    const parts = line.split(/\\s+/);\n    post({ type: 'bestmove', move: parts[1] || null, ponder: parts[3] || null });\n    return;\n  }\n  if (line.indexOf('info') === 0) {\n    const d = { type: 'info', line };\n    const depth = line.match(/ depth (\\d+)/);\n    const score = line.match(/ score (cp|mate) (-?\\d+)/);\n    const nodes = line.match(/ nodes (\\d+)/);\n    if (depth) d.depth = parseInt(depth[1], 10);\n    if (nodes) d.nodes = parseInt(nodes[1], 10);\n    if (score) d.score = (score[1] === 'mate' ? 'mate ' : '') + score[2];\n    post(d);\n    return;\n  }\n  post({ type: 'log', line });\n}\n\nfunction post(msg) { self.postMessage(msg); }\n\nasync function instantiate(wasmBytes) {\n  /* Импорты: контракт send_line + минимальный env-заглушки.\n     Для WASI-сборки добавьте сюда wasi_snapshot_preview1 с fd_write,\n     пишущим в handleEngineLine. */\n  const memory = { mem: null };\n  const imports = {\n    env: {\n      send_line: (ptr, len) => {\n        if (!memory.mem) return;\n        const bytes = new Uint8Array(memory.mem.buffer, ptr, len);\n        handleEngineLine(decode(bytes));\n      },\n      abort: () => { post({ type: 'error', message: 'abort из модуля' }); },\n      emscripten_get_now: () => performance.now()\n    },\n    /* WASI-заглушка, если сборка с ней: вывод в stdout перехватываем */\n    wasi_snapshot_preview1: {\n      fd_write: (fd, iovs, iovsLen, nwritten) => {\n        if (!memory.mem || fd !== 1) return 0;\n        const view = new DataView(memory.mem.buffer);\n        let out = '';\n        for (let i = 0; i < iovsLen; i++) {\n          const ptr = view.getUint32(iovs + i * 8, true);\n          const len = view.getUint32(iovs + i * 8 + 4, true);\n          out += decode(new Uint8Array(memory.mem.buffer, ptr, len));\n        }\n        if (nwritten) view.setUint32(nwritten, out.length, true);\n        out.split('\\n').forEach(handleEngineLine);\n        return 0;\n      },\n      fd_read: () => 0, fd_seek: () => 0, fd_close: () => 0,\n      proc_exit: () => 0, environ_sizes_get: () => 0, environ_get: () => 0,\n      args_sizes_get: () => 0, args_get: () => 0, clock_time_get: () => 0,\n      sched_yield: () => 0, random_get: () => 0\n    }\n  };\n  const module = await WebAssembly.instantiate(wasmBytes, imports);\n  const inst = module.instance;\n  memory.mem = inst.exports.memory || inst.exports.mem || null;\n  commandLine = inst.exports.commandLine || inst.exports.command_line ||\n    (inst.exports.command && ((str) => {\n      /* строка передаётся указателем: кладём её в память модуля */\n      const bytes = encode(str);\n      const ptr = (inst.exports.malloc || inst.exports._malloc)(bytes.length);\n      new Uint8Array(memory.mem.buffer).set(bytes, ptr);\n      inst.exports.command(ptr, bytes.length);\n    }));\n  if (inst.exports.init) inst.exports.init();\n  return inst;\n}\n\nself.onmessage = async (event) => {\n  const d = event.data || {};\n  if (d.type === 'init') {\n    try {\n      postLine = null;\n      await instantiate(d.engine);\n      post({ type: 'log', line: 'модуль загружен, жду uci/isready' });\n    } catch (err) {\n      post({ type: 'error', message: 'не удалось загрузить WASM: ' + (err && err.message || err) });\n    }\n    return;\n  }\n  if (d.type === 'uci') {\n    if (!commandLine) { post({ type: 'error', message: 'модуль не готов (нет init)' }); return; }\n    try { commandLine(d.line); }\n    catch (err) { post({ type: 'error', message: 'сбой на строке UCI: ' + (err && err.message || err) }); }\n  }\n};\n",
+    workerSource: "/* =========================================================================\n   Шаблон JS-обвязки для запуска Rodent IV (или любого UCI-движка,\n   собранного в WASM/asm.js) внутри Web Worker браузера.\n   Rodent V (2026, язык Go) официальной веб-сборки не имеет — этот путь\n   остаётся для самосборных WASM-версий; в десктопе оба поколения\n   подключаются исполняемым файлом (см. справку в разделе «Движок»).\n\n   С версии 3.1 этот файл вшивается в index.html сборщиком: build.js подставляет\n   его текст вместо служебного токена ENGINEWORKER в src/app.js (поле\n   G.workerSource), поэтому приложение остаётся одним файлом и запускает\n   движок без интернета и без соседних файлов.\n\n   Это НЕ готовый движок, а контракт соединения. Родные сборки Rodent IV —\n   это исполняемые файлы Windows/Linux; чтобы они работали в браузере, их\n   компилируют в WebAssembly/asm.js (Emscripten) с подменой stdio. Данная\n   обвязка ожидает от такой сборки минимальный контракт:\n\n     модуль экспортирует:\n       init()                 — подготовка движка;\n       command(strPtr)        или  commandLine(str)  — подать строку UCI;\n     модуль импортирует:\n       send_line(ptr, len)    — отдать строку ответа UCI наружу.\n\n   Если ваша сборка использует WASI-stdio, замените подменю ввода-вывода\n   на pipes: обвязка ниже показывает, где именно.\n\n   Поток сообщений с приложением (Engines.start передаёт workerSource):\n     <- { type: 'init', engine: ArrayBuffer }   бинарник движка\n     <- { type: 'uci',  line: 'position fen …' } строка UCI от приложения\n     -> { type: 'ready' }                       движок ответил uciok + isready\n     -> { type: 'info', depth, score, nodes }   строки info depth …\n     -> { type: 'bestmove', move: 'e2e4' }      ход\n     -> { type: 'log', line }                   прочий вывод для журнала\n     -> { type: 'error', message }              сбой\n   ========================================================================= */\n'use strict';\n\nlet postLine = null;          // функция модуля для отправки строки наружу\nlet engineReady = false;\nlet commandLine = null;       // функция модуля для подачи строки UCI\n\nfunction decode(bytes) {\n  try { return new TextDecoder('utf-8').decode(bytes); } catch (e) { return ''; }\n}\nfunction encode(str) {\n  return new TextEncoder().encode(str + '\\n');\n}\n\n/* разбор строки UCI, пришедшей от движка */\nfunction handleEngineLine(line) {\n  line = String(line).trim();\n  if (!line) return;\n  if (line === 'uciok') { post({ type: 'log', line }); return; }\n  if (line === 'readyok') { engineReady = true; post({ type: 'ready' }); return; }\n  if (line.indexOf('bestmove') === 0) {\n    const parts = line.split(/\\s+/);\n    post({ type: 'bestmove', move: parts[1] || null, ponder: parts[3] || null });\n    return;\n  }\n  if (line.indexOf('info') === 0) {\n    const d = { type: 'info', line };\n    const depth = line.match(/ depth (\\d+)/);\n    const score = line.match(/ score (cp|mate) (-?\\d+)/);\n    const nodes = line.match(/ nodes (\\d+)/);\n    if (depth) d.depth = parseInt(depth[1], 10);\n    if (nodes) d.nodes = parseInt(nodes[1], 10);\n    if (score) d.score = (score[1] === 'mate' ? 'mate ' : '') + score[2];\n    post(d);\n    return;\n  }\n  post({ type: 'log', line });\n}\n\nfunction post(msg) { self.postMessage(msg); }\n\nasync function instantiate(wasmBytes) {\n  /* Импорты: контракт send_line + минимальный env-заглушки.\n     Для WASI-сборки добавьте сюда wasi_snapshot_preview1 с fd_write,\n     пишущим в handleEngineLine. */\n  const memory = { mem: null };\n  const imports = {\n    env: {\n      send_line: (ptr, len) => {\n        if (!memory.mem) return;\n        const bytes = new Uint8Array(memory.mem.buffer, ptr, len);\n        handleEngineLine(decode(bytes));\n      },\n      abort: () => { post({ type: 'error', message: 'abort из модуля' }); },\n      emscripten_get_now: () => performance.now()\n    },\n    /* WASI-заглушка, если сборка с ней: вывод в stdout перехватываем */\n    wasi_snapshot_preview1: {\n      fd_write: (fd, iovs, iovsLen, nwritten) => {\n        if (!memory.mem || fd !== 1) return 0;\n        const view = new DataView(memory.mem.buffer);\n        let out = '';\n        for (let i = 0; i < iovsLen; i++) {\n          const ptr = view.getUint32(iovs + i * 8, true);\n          const len = view.getUint32(iovs + i * 8 + 4, true);\n          out += decode(new Uint8Array(memory.mem.buffer, ptr, len));\n        }\n        if (nwritten) view.setUint32(nwritten, out.length, true);\n        out.split('\\n').forEach(handleEngineLine);\n        return 0;\n      },\n      fd_read: () => 0, fd_seek: () => 0, fd_close: () => 0,\n      proc_exit: () => 0, environ_sizes_get: () => 0, environ_get: () => 0,\n      args_sizes_get: () => 0, args_get: () => 0, clock_time_get: () => 0,\n      sched_yield: () => 0, random_get: () => 0\n    }\n  };\n  const module = await WebAssembly.instantiate(wasmBytes, imports);\n  const inst = module.instance;\n  memory.mem = inst.exports.memory || inst.exports.mem || null;\n  commandLine = inst.exports.commandLine || inst.exports.command_line ||\n    (inst.exports.command && ((str) => {\n      /* строка передаётся указателем: кладём её в память модуля */\n      const bytes = encode(str);\n      const ptr = (inst.exports.malloc || inst.exports._malloc)(bytes.length);\n      new Uint8Array(memory.mem.buffer).set(bytes, ptr);\n      inst.exports.command(ptr, bytes.length);\n    }));\n  if (inst.exports.init) inst.exports.init();\n  return inst;\n}\n\nself.onmessage = async (event) => {\n  const d = event.data || {};\n  if (d.type === 'init') {\n    try {\n      postLine = null;\n      await instantiate(d.engine);\n      post({ type: 'log', line: 'модуль загружен, жду uci/isready' });\n    } catch (err) {\n      post({ type: 'error', message: 'не удалось загрузить WASM: ' + (err && err.message || err) });\n    }\n    return;\n  }\n  if (d.type === 'uci') {\n    if (!commandLine) { post({ type: 'error', message: 'модуль не готов (нет init)' }); return; }\n    try { commandLine(d.line); }\n    catch (err) { post({ type: 'error', message: 'сбой на строке UCI: ' + (err && err.message || err) }); }\n  }\n};\n",
     designer: false,        /* режим дизайнера: красим интерфейс кликом (3.1) */
     designerTarget: null,   /* элемент под курсором и его переменные темы */
     savedId: null,          /* id записи в архиве, если текущая партия сохранена */
@@ -4468,8 +4535,16 @@ body.picker-open .set-bg.on{opacity:.15}
   /* ============================ ФИГУРЫ (SVG) ============================ */
   function pieceHTML(pc, cls) {
     if (!pc) return '';
-    var id = 'pc-' + (pc === pc.toUpperCase() ? 'w' : 'b') + pc.toUpperCase();
-    return '<svg viewBox="0 0 45 45" class="' + (cls || 'pc') + '" aria-hidden="true"><use href="#' + id + '"/></svg>';
+    var w = pc === pc.toUpperCase();
+    var id = 'pc-' + (w ? 'w' : 'b') + pc.toUpperCase();
+    /* Цвет тела фигуры наследуется внутрь <use>: у чёрных ферзя, ладьи и пешки
+       в спрайте fill не задан явно, и они берут его отсюда. Явные fill/stroke
+       в спрайте заменены на var(--pc-*) сборщиком (флаг PIECE_THEME). Значения
+       по умолчанию равны цветам Cburnett — классический вид не меняется.
+       Классы pw/pb нужны подсветке «что красит эта переменная» (3.2). */
+    var fill = w ? 'var(--pc-w-fill,#fff)' : 'var(--pc-b-fill,#000)';
+    return '<svg viewBox="0 0 45 45" class="' + (cls || 'pc') + ' ' + (w ? 'pw' : 'pb') +
+      '" aria-hidden="true"><use href="#' + id + '" style="fill:' + fill + '"/></svg>';
   }
 
   /* ============================ ДОСКА ============================ */
@@ -4546,16 +4621,27 @@ body.picker-open .set-bg.on{opacity:.15}
   }
 
   /* ============================ СТРЕЛКИ ПРАВОЙ КНОПКОЙ ============================ */
-  var ARROW_COLORS = ['#3aa0ff', '#ffb02e', '#ff5f5f', '#57d97a'];
+  /* Цвета меток живут в теме (--mark-1…4 в :root и в реестре): SVG-элементы
+     получают var() прямо в style, поэтому перекраска применяется мгновенно и
+     без перерисовки, а значения по умолчанию равны прежним хардкод-цветам. */
+  var MARK_VARS = ['--mark-1', '--mark-2', '--mark-3', '--mark-4'];
+  var MARK_STYLE = [
+    'var(--mark-1,#3aa0ff)', 'var(--mark-2,#ffb02e)',
+    'var(--mark-3,#ff5f5f)', 'var(--mark-4,#57d97a)'
+  ];
+  /* удержание правой кнопки на одной клетке открывает выбор цвета меток (3.2) */
+  var MARK_HOLD_MS = 500;
   var markDrag = null;
+
+  function markStyle(i) { return MARK_STYLE[(((i || 0) % 4) + 4) % 4]; }
 
   function markSVG(m) {
     if (!m) return '';
-    var color = ARROW_COLORS[(m.color || 0) % ARROW_COLORS.length];
+    var color = markStyle(m.color);
     var a = centerOf(m.from);
     if (m.type === 'circle' || m.from === m.to) {
       return '<circle cx="' + n3(a.x) + '" cy="' + n3(a.y) + '" r="0.42" fill="none" ' +
-        'stroke="' + color + '" stroke-width="0.11" opacity="0.9"/>';
+        'style="stroke:' + color + '" stroke-width="0.11" opacity="0.9"/>';
     }
     var b = centerOf(m.to);
     var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy);
@@ -4567,9 +4653,9 @@ body.picker-open .set-bg.on{opacity:.15}
     var sx = a.x + ux * 0.1, sy = a.y + uy * 0.1;
     var px = -uy * half, py = ux * half;
     return '<line x1="' + n3(sx) + '" y1="' + n3(sy) + '" x2="' + n3(bx) + '" y2="' + n3(by) +
-      '" stroke="' + color + '" stroke-width="0.14" stroke-linecap="round" opacity="0.9"/>' +
+      '" style="stroke:' + color + '" stroke-width="0.14" stroke-linecap="round" opacity="0.9"/>' +
       '<polygon points="' + n3(tx) + ',' + n3(ty) + ' ' + n3(bx + px) + ',' + n3(by + py) + ' ' +
-      n3(bx - px) + ',' + n3(by - py) + '" fill="' + color + '" opacity="0.9"/>';
+      n3(bx - px) + ',' + n3(by - py) + '" style="fill:' + color + '" opacity="0.9"/>';
   }
   function renderMarks(preview) {
     var layer = $('arrowLayer');
@@ -4595,22 +4681,43 @@ body.picker-open .set-bg.on{opacity:.15}
         G.marks.splice(i, 1); return;
       }
     }
-    m.color = G.marks.length % ARROW_COLORS.length;
+    m.color = G.marks.length % MARK_VARS.length;
     G.marks.push(m);
   }
+  /* Правая кнопка на доске: короткое нажатие — круг, тяга к другой клетке —
+     стрелка (как раньше), а удержание на одной клетке дольше MARK_HOLD_MS —
+     окно «цвет того, что рисуем» (3.2). Таймер снимается, как только курсор
+     уходит на другую клетку или за пределы доски: началась стрелка. */
   function startMarkDrag(e, sq) {
     endMarkDrag();
     if (e.preventDefault) e.preventDefault();
-    markDrag = { from: sq, x: e.clientX || 0, y: e.clientY || 0, moved: false };
+    markDrag = {
+      from: sq, x: e.clientX || 0, y: e.clientY || 0, moved: false,
+      held: false, holdTimer: setTimeout(onMarkHold, MARK_HOLD_MS),
+      noDraw: designerActive()      /* в режиме дизайнера метки не рисуются */
+    };
+    var cell = cellEls[sq];
+    if (cell && cell.el) {
+      cell.el.classList.remove('hold-ring');
+      void cell.el.offsetWidth;                 /* перезапуск анимации кольца */
+      cell.el.classList.add('hold-ring');
+    }
     window.addEventListener('pointermove', onMarkMove);
     window.addEventListener('pointerup', onMarkUp);
     window.addEventListener('pointercancel', onMarkUp);
     window.addEventListener('mousemove', onMarkMove);
     window.addEventListener('mouseup', onMarkUp);
   }
+  function clearHoldRing() {
+    for (var k in cellEls) {
+      try { cellEls[k].el.classList.remove('hold-ring'); } catch (e) { /* клетка ещё не построена */ }
+    }
+  }
   function endMarkDrag() {
     if (!markDrag) return;
+    if (markDrag.holdTimer) clearTimeout(markDrag.holdTimer);
     markDrag = null;
+    clearHoldRing();
     window.removeEventListener('pointermove', onMarkMove);
     window.removeEventListener('pointerup', onMarkUp);
     window.removeEventListener('pointercancel', onMarkUp);
@@ -4618,19 +4725,37 @@ body.picker-open .set-bg.on{opacity:.15}
     window.removeEventListener('mouseup', onMarkUp);
     renderMarks();
   }
+  function onMarkHold() {
+    var d = markDrag;
+    if (!d || d.held) return;
+    d.held = true;
+    if (d.holdTimer) { clearTimeout(d.holdTimer); d.holdTimer = null; }
+    clearHoldRing();
+    endMarkDrag();          /* снимаем слушатели: отпускание кнопки уже ничего не рисует */
+    openMarksChooser(d.from);
+  }
   function onMarkMove(e) {
     if (!markDrag) return;
     var x = e.clientX || 0, y = e.clientY || 0;
     if (Math.abs(x - markDrag.x) > 6 || Math.abs(y - markDrag.y) > 6) markDrag.moved = true;
     var to = sqFromPoint(x, y);
+    /* удержание действует, только пока курсор на той же клетке доски */
+    if (markDrag.holdTimer && (to < 0 || to !== markDrag.from)) {
+      clearTimeout(markDrag.holdTimer);
+      markDrag.holdTimer = null;
+      clearHoldRing();
+    }
+    if (markDrag.noDraw) return;
     if (to < 0) to = markDrag.from;
-    renderMarks(markDrag.moved ? { type: 'arrow', from: markDrag.from, to: to, color: G.marks.length % ARROW_COLORS.length } : null);
+    renderMarks(markDrag.moved ? { type: 'arrow', from: markDrag.from, to: to, color: G.marks.length % MARK_VARS.length } : null);
   }
   function onMarkUp(e) {
     var d = markDrag;
+    if (!d) return;
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     endMarkDrag();
-    if (!d) return;
+    if (d.held) return;      /* удержание уже открыло окно цвета — метку не ставим */
+    if (d.noDraw) return;    /* режим дизайнера: правая кнопка ничего не рисует */
     if (!d.moved || to < 0 || to === d.from) {
       /* правый клик без перетаскивания или внутри одной клетки — круг-пометка */
       toggleMark({ type: 'circle', from: d.from, to: d.from });
@@ -4936,30 +5061,37 @@ body.picker-open .set-bg.on{opacity:.15}
         'и посмотреть журнал UCI.</div>';
     }
 
-    /* блок Rodent IV */
+    /* блок Rodent IV / V */
     var r = E.byId('rodent4');
     var installed = E.isInstalled('rodent4');
     var info = E.installedInfo('rodent4');
     var native = installed && E.isNative('rodent4');
     var detN = E.detectedOptions('rodent4').length;
+    var ident = E.engineIdentity('rodent4');
+    var identLine = ident && ident.name
+      ? '<br>Движок представился: <b>' + esc(ident.name) + '</b>' +
+        (ident.author ? ' · ' + esc(ident.author) : '') : '';
     $('rodentInfo').innerHTML = installed
       ? (native
         ? ('Подключён исполняемый файл: <b>' + esc(info.name) + '</b> · добавлен ' +
            esc(String(info.added).slice(0, 16).replace('T', ' ')) + '<br>Путь: <code>' + esc(info.path || '') + '</code>' +
-           ' — запускается отдельным процессом обёртки, в хранилище браузера не копируется.' +
+           ' — запускается отдельным процессом обёртки (рабочая папка — папка движка), в хранилище браузера не копируется.' +
            (st.native ? '<br><b>Процесс запущен, UCI-поток подключён.</b>' : '<br>Процесс не запущен — нажмите «Проверить».') +
+           identLine +
            (detN ? '<br>Движок объявил опций: <b>' + detN + '</b> (видны в карточке движка).' : ''))
         : ('Установлен: <b>' + esc(info.name) + '</b> · ' +
            S.sizeLabel(info.size) + ' · добавлен ' +
            esc(String(info.added).slice(0, 16).replace('T', ' ')) +
            '<br>Хранится в ' + esc(info.storage) + ' — место архива партий не расходуется.' +
+           identLine +
            (detN ? '<br>Движок объявил опций: <b>' + detN + '</b>.' : ''))) +
         ((st.active === 'rodent4' && !native) ? '<br><b>Сейчас компьютер играет этим движком.</b>' : '') +
         ((st.active === 'rodent4' && native && st.native) ? '<br><b>Сейчас компьютер играет этим движком.</b>' : '')
       : ('Не установлен. Место подготовлено: каталог движков, UCI-транспорт (Web Worker для WASM-сборки ' +
          'и отдельный процесс для exe), разбор настоящих опций движка, настройка силы через ' +
-         'MoveTime/DepthLimit/NodeLimit и пресеты «Лёгкий/Средний/Сильный». Осталось добавить саму сборку: ' +
-         'в десктопе — исполняемый файл, в браузере — WASM.');
+         'MoveTime/DepthLimit/NodeLimit и пресеты «Лёгкий/Средний/Сильный». Осталось добавить сам движок: ' +
+         'в десктопе — исполняемый файл Rodent V или IV (архив распакуйте целиком в одну папку), ' +
+         'в браузере — WASM-сборку.');
     $('btnRodentUse').disabled = !installed;
     $('btnRodentTest').disabled = !installed;
     $('btnRodentDel').disabled = !installed;
@@ -4967,8 +5099,8 @@ body.picker-open .set-bg.on{opacity:.15}
     $('btnRodentExe').disabled = !nativeOk;
     $('btnRodentExe').innerHTML = native ? '\u{1F5A5} Перезапустить exe…' : '\u{1F5A5} Выбрать exe…';
     $('btnRodentExe').setAttribute('data-tip', nativeOk
-      ? (native ? 'Заново выбрать исполняемый файл Rodent IV и перезапустить процесс'
-        : 'Выбрать исполняемый файл Rodent IV и запустить его отдельным процессом')
+      ? (native ? 'Заново выбрать исполняемый файл Rodent (IV или V) и перезапустить процесс'
+        : 'Выбрать исполняемый файл Rodent V или IV и запустить его отдельным процессом')
       : 'Доступно только в десктоп-версии (Electron/Tauri): в браузере добавьте WASM-сборку');
     $('rodentHelp').innerHTML = RODENT_HELP;
   }
@@ -5079,12 +5211,14 @@ body.picker-open .set-bg.on{opacity:.15}
      но ссылки открывает системным браузером через слой платформы */
   var RODENT_URLS = {
     site: 'http://www.pkoziol.cal24.pl/rodent/download.htm',
-    repo: 'https://github.com/nescitus/rodent-iv'
+    repo: 'https://github.com/nescitus/rodent-iv',
+    vrepo: 'https://github.com/nescitus/Rodent-V',
+    vrel: 'https://github.com/nescitus/Rodent-V/releases'
   };
   function openRodentUrl(kind) {
     var url = RODENT_URLS[kind];
     if (!url) return;
-    addLog('Открываю страницу Rodent IV: ' + esc(url), 'arch');
+    addLog('Открываю страницу Rodent: ' + esc(url), 'arch');
     P.openExternal(url).then(function (res) {
       if (!res || !res.ok) toast('БРАУЗЕР НЕ ОТКРЫЛСЯ', 'check', url);
     }).catch(function () { toast('БРАУЗЕР НЕ ОТКРЫЛСЯ', 'check', url); });
@@ -5093,29 +5227,48 @@ body.picker-open .set-bg.on{opacity:.15}
   var RODENT_HELP =
     '<b>Что уже сделано в приложении</b><br>' +
     'Каталог движков; установка файла в IndexedDB (вне архива партий); запуск исполняемого файла ' +
-    'отдельным процессом в десктоп-обёртке; запуск WASM-сборки в Web Worker (JS-обвязка потока вшита ' +
-    'в приложение); протокол UCI (uci / isready / ucinewgame / setoption / position fen / go / stop); ' +
-    'чтение настоящих опций движка из рукопожатия uciok; подписка на info и bestmove; перевод хода из ' +
-    'нотации UCI (e2e4, e7e8q) в ход на доске; ограничение силы (время на ход, глубина, узлы) и пресеты ' +
-    '«Лёгкий / Средний / Сильный»; перезапуск движка при следующем открытии приложения.<br><br>' +
-    '<b>Вариант 1 — версия для компьютера (три действия, ничего программировать не нужно)</b><br>' +
-    '1. Скачайте Rodent IV: финальный пакет автора — FinalRodent.7z на pkoziol.cal24.pl/rodent/download.htm ' +
-    '(или исходники и сборки в репозитории github.com/nescitus/rodent-iv). Движок распространяется под GPL 3.0 ' +
-    'и в наше приложение не вложен: вы добавляете свою копию, она остаётся на вашем устройстве.<br>' +
-    '2. Распакуйте архив (нужен 7-Zip) и запомните папку: рядом с exe лежат каталоги personalities и books — ' +
-    'мы запускаем процесс с рабочей папкой движка, поэтому он найдёт свои файлы.<br>' +
-    '3. Здесь нажмите «🖥 Выбрать exe…» и укажите исполняемый файл. Приложение запустит его процессом, ' +
-    'спросит uci/isready, прочитает список опций и сделает Rodent IV активным движком.<br>' +
-    'Дальше компьютер играет им; путь запоминается, и при следующем запуске процесс поднимется сам. ' +
-    'Сила — пресетами внизу карточки движка, стиль — опцией Personality из настоящего списка опций движка.<br><br>' +
-    '<b>Вариант 2 — браузер и PWA</b><br>' +
-    'Здесь нужен Rodent IV, скомпилированный в WebAssembly (или asm.js): официально движок распространяется ' +
-    'только как исполняемый файл, готовой веб-сборки у автора нет. Если вы соберёте её сами (Emscripten, ' +
-    'WASI-stdio), перетащите файл в поле выше — обвязка потока уже вшита и ожидает от модуля экспорты ' +
-    'init() и commandLine() (или command()), а вывод движка перехватывает через fd_write.<br><br>' +
-    '<b>Итого от вас нужен только файл движка.</b> Если запуск не удался — раскройте «Журнал UCI» в карточке ' +
-    'движка: там видны все строки обмена. Чаще всего мешают антивирус (блокирует запуск exe), 32-битная ' +
-    'сборка без UCI или путь с кириллицей в старой сборке движка.';
+    'отдельным процессом в десктоп-обёртке (рабочая папка процесса — папка движка); запуск WASM-сборки ' +
+    'в Web Worker (JS-обвязка потока вшита в приложение); протокол UCI (uci / isready / ucinewgame / ' +
+    'setoption / position fen / go / stop); чтение настоящих опций движка из рукопожатия uciok — ' +
+    'приложение показывает, как движок представился (id name), поэтому Rodent V видно сразу; ' +
+    'подписка на info и bestmove; перевод хода из нотации UCI (e2e4, e7e8q) в ход на доске; ' +
+    'ограничение силы (время на ход, глубина, узлы) и пресеты «Лёгкий / Средний / Сильный»; ' +
+    'перезапуск движка при следующем открытии приложения.<br><br>' +
+    '<b>Вариант 1 — Rodent V (рекомендуем, версия для компьютера)</b><br>' +
+    '1. Откройте страницу релизов github.com/nescitus/Rodent-V/releases (кнопка «↗ Rodent V» ниже) ' +
+    'и скачайте архив release-1-2.zip (~46 МБ). Движок распространяется под GPL и в наше приложение ' +
+    'не вложен: вы добавляете свою копию, она остаётся на вашем устройстве.<br>' +
+    '2. <b>Распакуйте архив ЦЕЛИКОМ в одну папку</b> — это и есть ответ на вопрос «как вложить архив»: ' +
+    'в приложение указывается только один исполняемый файл, а остальные файлы архива движок читает сам ' +
+    'с диска. В папке должны остаться подпапки <code>personalities</code> (стили игры), <code>nets</code> ' +
+    '(нейросети NNUE) и <code>books</code> (дебютные книги) — пути к ним относительные, поэтому структура ' +
+    'папок важна. В самой папке несколько exe: берите <code>rodent_v_1.2.exe</code> (обычный); ' +
+    '<code>_Tal</code> — то же с более агрессивным стилем по умолчанию, <code>_testers</code> — вариант ' +
+    'для тестов с заблокированными опциями.<br>' +
+    '3. Здесь нажмите «🖥 Выбрать exe…» и укажите файл. Приложение запустит его процессом, спросит ' +
+    'uci/isready, прочитает имя («Rodent V 1.2 AVX2») и настоящие опции — Hash, Threads, MultiPV, ' +
+    'UCI_LimitStrength, UCI_Elo (800…3000), PersonalityFile — и сделает движок активным.<br>' +
+    'Стиль меняется опцией <b>PersonalityFile</b> (например, <code>personalities/tal_nnue.txt</code> — ' +
+    'файлы лежат в подпапке personalities, внутри них готовые наборы setoption). Сила — пресетами ' +
+    '«Лёгкий/Средний/Сильный» (ограничение времени на ход), а для точной настройки включите ' +
+    'UCI_LimitStrength и выставите UCI_Elo. Приложение запускает exe без аргументов — это обычный ' +
+    'режим движка; режимы <code>alloptions</code>/<code>nooptions</code> задаются аргументом командной ' +
+    'строки и из приложения не передаются.<br><br>' +
+    '<b>Вариант 2 — Rodent IV (версия для компьютера)</b><br>' +
+    'Финальный пакет автора — FinalRodent.7z на pkoziol.cal24.pl/rodent/download.htm (или репозиторий ' +
+    'github.com/nescitus/rodent-iv). Тоже распакуйте архив целиком: рядом с exe лежат каталоги ' +
+    'personalities и books — процесс запускается с рабочей папкой движка, поэтому он найдёт свои файлы. ' +
+    'Дальше — та же кнопка «🖥 Выбрать exe…». Стиль — опцией Personality из списка опций движка.<br><br>' +
+    '<b>Вариант 3 — браузер и PWA</b><br>' +
+    'Здесь нужен движок, скомпилированный в WebAssembly (или asm.js): официально ни Rodent IV, ни ' +
+    'Rodent V веб-сборок не имеют, а Rodent V (на Go) в браузер не перенесён. Если вы соберёте WASM ' +
+    'сами (Emscripten, WASI-stdio), перетащите ОДИН файл сборки в поле выше — архивы браузер не ' +
+    'принимает, обвязка потока уже вшита и ожидает от модуля экспорты init() и commandLine() ' +
+    '(или command()), а вывод движка перехватывает через fd_write.<br><br>' +
+    '<b>Итого: архив распаковывается на диск целиком, а в приложение вкладывается один файл — ' +
+    'исполняемый (десктоп) или .wasm (браузер).</b> Если запуск не удался — раскройте «Журнал UCI» ' +
+    'в карточке движка: там видны все строки обмена. Чаще всего мешают антивирус (блокирует запуск exe), ' +
+    'SmartScreen у свежего exe без подписи или перемещённая/переименованная папка personalities.';
 
   function platformNoteHTML() {
     var i = P.info();
@@ -5131,6 +5284,19 @@ body.picker-open .set-bg.on{opacity:.15}
   function onEngineFile(fileInput) {
     var f = fileInput.files && fileInput.files[0];
     if (!f) return;
+    /* архивы браузер не принимает: в IndexedDB нужен сам бинарник движка,
+       а распаковать архив страница не может. В десктопе архив распаковывают
+       на диск и указывают exe кнопкой «Выбрать exe…». */
+    if (/\.(zip|7z|rar|tar|gz)$/i.test(f.name)) {
+      $('rodentProgress').textContent = '';
+      toast('НУЖЕН САМ ФАЙЛ ДВИЖКА', 'check',
+        P.nativeEngineAvailable()
+          ? 'распакуйте архив в папку и нажмите «🖥 Выбрать exe…»'
+          : 'распакуйте архив и добавьте один файл .wasm или .js');
+      sfx('no');
+      fileInput.value = '';
+      return;
+    }
     $('rodentProgress').textContent = 'Читаем ' + f.name + ' (' + S.sizeLabel(f.size) + ')…';
     var rd = new FileReader();
     rd.onload = function () {
@@ -5161,20 +5327,32 @@ body.picker-open .set-bg.on{opacity:.15}
     if (!E.setActive('rodent4')) { toast('Движок недоступен', 'check', 'сначала добавьте файл сборки'); sfx('no'); return; }
     S.setSetting('engine', 'rodent4');
     E.newGame();
-    addLog('Активный движок: <b>Rodent IV</b>. Уровень силы задаётся пресетом UCI.', 'arch');
-    toast('RODENT IV АКТИВЕН', 'arch', 'параметры — в карточке движка');
+    addLog('Активный движок: <b>' + esc(rodentDisplayName()) + '</b>. Уровень силы задаётся пресетом UCI.', 'arch');
+    toast('RODENT АКТИВЕН', 'arch', 'параметры — в карточке движка');
     render();
     /* пробуем запустить: exe — процессом обёртки, WASM-сборку — в Web Worker */
     testEngine('rodent4');
+  }
+  /* имя для интерфейса: движок сам представляется при рукопожатии (id name),
+     а до рукопожатия показываем имя добавленного файла */
+  function rodentDisplayName() {
+    var id = E.engineIdentity('rodent4');
+    if (id && id.name) return id.name;
+    var info = E.installedInfo('rodent4');
+    if (info && info.name) return info.name;
+    return 'Rodent IV / V';
   }
   function testEngine(id) {
     if (!E.isInstalled(id)) { toast('Движок не установлен', 'check', ''); return; }
     pushEngineLog('--- проверка ' + id + (E.isNative(id) ? ' (процесс обёртки)' : ' (Web Worker)') + ' ---');
     E.start(id, { workerSource: G.workerSource }).then(function (r) {
       pushEngineLog('движок готов: ' + JSON.stringify(r));
+      var idn = E.engineIdentity(id);
+      if (idn && idn.name) pushEngineLog('движок представился: ' + idn.name + (idn.author ? ' · ' + idn.author : ''));
       var n = E.detectedOptions(id).length;
       if (n) pushEngineLog('опции движка получены: ' + E.detectedOptions(id).map(function (o) { return o.name; }).join(', '));
-      toast('ДВИЖОК ОТВЕЧАЕТ', 'arch', id + ' готов к работе' + (n ? ' · опций: ' + n : ''));
+      toast('ДВИЖОК ОТВЕЧАЕТ', 'arch',
+        (idn && idn.name ? idn.name : id) + ' готов к работе' + (n ? ' · опций: ' + n : ''));
       renderEngineTab();
       sfx('save');
     }).catch(function (err) {
@@ -5205,7 +5383,7 @@ body.picker-open .set-bg.on{opacity:.15}
   /* Перезапуск нативного движка при старте приложения: путь к exe сохранён в
      настройках, а сам процесс после закрытия окна, естественно, не живёт.
      Без этого компьютер после перезапуска молча играл бы встроенным ботом,
-     хотя в настройках выбран Rodent IV. */
+     хотя в настройках выбран внешний движок Rodent. */
   function restoreNativeEngine() {
     if (!P.nativeEngineAvailable()) return Promise.resolve(null);
     var st = S.settings();
@@ -5216,15 +5394,18 @@ body.picker-open .set-bg.on{opacity:.15}
       E.setActive('rodent4');
       E.newGame();
       pushEngineLog('движок восстановлен: ' + JSON.stringify(r));
-      addLog('<b>Rodent IV</b> запущен снова (' + esc(st.engineExe) + ') — компьютер играет им.', 'arch');
+      var idn = E.engineIdentity('rodent4');
+      addLog('<b>' + esc((idn && idn.name) || 'Внешний движок') + '</b> запущен снова (' +
+        esc(st.engineExe) + ') — компьютер играет им.', 'arch');
       renderEngineTab();
       return r;
     }).catch(function (err) {
       pushEngineLog('не удалось восстановить движок: ' + err.message);
-      addLog('Движок <b>Rodent IV</b> не запустился (' + esc(err.message) + ') — компьютер играет встроенным ботом.', 'check');
+      addLog('Внешний движок <b>Rodent</b> не запустился (' + esc(err.message) +
+        ') — компьютер играет встроенным ботом.', 'check');
       S.setSetting('engine', 'builtin');
       E.setActive('builtin');
-      toast('RODENT IV НЕ ЗАПУСТИЛСЯ', 'check', err.message);
+      toast('RODENT НЕ ЗАПУСТИЛСЯ', 'check', err.message);
       renderEngineTab();
       return null;
     });
@@ -5753,7 +5934,7 @@ body.picker-open .set-bg.on{opacity:.15}
           ' из ' + S.sizeLabel(q.limit) + ' (' + (typeof q.pct === 'number' ? q.pct : 0).toFixed(0) + '%).';
       ai.innerHTML = quotaLine + '<br>Всего данных в хранилище: ' + esc(S.usageLabel()) + '.' +
         '<br>Полные правила шахмат, игра за обе стороны, компьютер, архив партий в PGN, профили соперников, ' +
-        'стрелки разбора и место под внешние движки (Rodent IV). Один файл, работает без интернета.';
+        'стрелки разбора и место под внешние движки (Rodent IV / V). Один файл, работает без интернета.';
     }
   }
   /* живые данные окна настроек: журнал, движок, «О программе», галочки */
@@ -5900,7 +6081,7 @@ body.picker-open .set-bg.on{opacity:.15}
   }
 
   /* ============================ ЦВЕТОВАЯ ТЕМА (3.0) ============================
-     Категория «Цвета» в окне настроек: реестр из 72 элементов интерфейса и
+     Категория «Цвета» в окне настроек: реестр из 81 элемента интерфейса и
      доски (Theme.GROUPS), HSL-пипетка с палитрой, HEX-полем, прозрачностью и
      двухцветными градиентами, 7 готовых палитр, экспорт/импорт темы в JSON и
      точечная раскраска отдельных клеток (расширенный режим, по умолчанию
@@ -6072,7 +6253,7 @@ body.picker-open .set-bg.on{opacity:.15}
       '<div class="cp-row"><span class="cp-lab">Насыщенность (S)</span><input type="range" id="cpS" min="0" max="100" step="1" aria-label="Насыщенность"><span class="cp-num" id="cpSn"></span></div>' +
       '<div class="cp-row"><span class="cp-lab">Светлота (L)</span><input type="range" id="cpL" min="0" max="100" step="1" aria-label="Светлота"><span class="cp-num" id="cpLn"></span></div>' +
       '<div class="cp-row"><span class="cp-lab">Прозрачность (A)</span><input type="range" id="cpA" min="0" max="100" step="1" aria-label="Прозрачность"><span class="cp-num" id="cpAn"></span></div>' +
-      '<div class="cp-row"><span class="cp-lab">HEX-код</span><input class="inp cp-hex" id="cpHex" maxlength="9" spellcheck="false" aria-label="HEX-код"><span class="cp-target-hint" id="cpTarget"></span></div>' +
+      '<div class="cp-row hexrow"><span class="cp-lab">HEX-код</span><input class="inp cp-hex" id="cpHex" maxlength="9" spellcheck="false" aria-label="HEX-код"><span class="cp-target-hint" id="cpTarget"></span></div>' +
       (canGrad
         ? '<label class="chk"><input type="checkbox" id="cpGrad"> Двухцветный градиент</label>' +
           '<div id="cpGradBox" hidden>' +
@@ -6240,7 +6421,7 @@ body.picker-open .set-bg.on{opacity:.15}
 
   /* ---------- подсветка «что именно я крашу» ----------
      При открытии пипетки все элементы, которые красит эта переменная, на
-     полторы секунды обводятся золотом: список из 72 названий сам по себе
+     полторы секунды обводятся золотом: список из 81 названия сам по себе
      не отвечает на вопрос «где это видно?», а подсветка отвечает сразу. */
   var flashTimer = null, flashEls = [];
   function clearFlash() {
@@ -6255,9 +6436,29 @@ body.picker-open .set-bg.on{opacity:.15}
     if (target && target.sq !== undefined && target.sq !== null) {
       sels = ['#board .sq[data-sq="' + (parseInt(target.sq, 10) || 0) + '"]'];
     } else if (target && target.v) {
-      sels = T.selectorsFor(target.v);
-      /* переменные, которые app.js ставит инлайн-стилем, ищем по атрибуту */
-      if (!sels.length) sels = ['[style*="' + target.v + '"]'];
+      var mm = /^--mark-([1-4])$/.exec(target.v);
+      if (mm) {
+        /* стрелки и круги — внутри SVG: обводка там ненадёжна, поэтому золотом
+           подсвечиваются клетки, на которых стоят метки этого цвета */
+        var mi = parseInt(mm[1], 10) - 1, sqSeen = {};
+        (G.marks || []).forEach(function (m) {
+          if ((((m.color || 0) % 4) + 4) % 4 !== mi) return;
+          [m.from, m.to].forEach(function (s) {
+            if (s === undefined || s === null || sqSeen[s]) return;
+            sqSeen[s] = 1;
+          });
+        });
+        sels = Object.keys(sqSeen).map(function (s) { return '#board .sq[data-sq="' + s + '"]'; });
+      } else if (/^--pc-(w|b)-/.test(target.v)) {
+        /* цвет фигур живёт в спрайте (теневое дерево <use>) — подсвечиваем
+           сами отрисованные фигуры нужной стороны. (--pc-shadow не сюда:
+           он применяется CSS-фильтром и находится через selectorsFor.) */
+        sels = ['svg.' + (target.v.indexOf('--pc-w-') === 0 ? 'pw' : 'pb')];
+      } else {
+        sels = T.selectorsFor(target.v);
+        /* переменные, которые app.js ставит инлайн-стилем, ищем по атрибуту */
+        if (!sels.length) sels = ['[style*="' + target.v + '"]'];
+      }
     }
     var els = [];
     sels.forEach(function (sel) {
@@ -6449,7 +6650,7 @@ body.picker-open .set-bg.on{opacity:.15}
   }
 
   /* ============================ РЕЖИМ ДИЗАЙНЕРА (3.1) ============================
-     Список из 72 элементов — это точно, но непонятно: «Границы элементов»
+     Список из 81 элемента — это точно, но непонятно: «Границы элементов»
      ещё нужно найти глазами. В режиме дизайнера пользователь красит то, что
      видит: окно настроек закрывается, под курсором подсвечивается элемент,
      а клик открывает список цветов, которые этот элемент формируют, и
@@ -6465,6 +6666,9 @@ body.picker-open .set-bg.on{opacity:.15}
          именно перекрасить»);
        • левый Shift+клик — обычное действие элемента (переход по вкладке,
          кнопка): клик не перехватывается, рамка подсветки становится синей;
+       • правая кнопка проходит на доску: её удержание на одной клетке (≈0,5 с)
+         открывает окно цвета стрелок и меток — и в режиме дизайнера тоже
+         (метки при этом не рисуются, флаг noDraw в startMarkDrag);
        • Esc — выход в любом месте (если открыта пипетка, первый Esc закрывает
          её и откатывает цвет, второй — выводит из режима);
        • игровые хоткеи (F, M, N, стрелки) в режиме не работают, чтобы
@@ -6506,9 +6710,26 @@ body.picker-open .set-bg.on{opacity:.15}
          шаха, взятия) и её оформленных потомков (координаты, тень фигур). */
       var seen = {};
       seen[list[0].v || ('sq' + sq)] = 1;
+      /* цвета фигуры (3.2): заливка, контур и светлые детали — только если
+         фигура на клетке действительно есть */
+      var pcAt = cur().b[sq];
+      if (pcAt) {
+        var pcVars = C.colorOf(pcAt) === 'w'
+          ? ['--pc-w-fill', '--pc-w-line']
+          : ['--pc-b-fill', '--pc-b-line', '--pc-b-hi'];
+        pcVars.forEach(function (v) {
+          var it = T.BY_VAR[v];
+          if (!it || seen[v]) return;
+          seen[v] = 1;
+          list.push({
+            v: v, n: it.n, label: 'фигура на клетке', group: 'Фигуры',
+            g: false, rank: 0, order: 0
+          });
+        });
+      }
       var addFrom = function (node) {
         T.varsFor(node, 0).vars.forEach(function (x) {
-          if (list.length >= 9 || seen[x.v]) return;
+          if (list.length >= 12 || seen[x.v]) return;
           if (x.v === '--light' || x.v === '--dark') return;   /* цвет клетки уже первым пунктом */
           seen[x.v] = 1;
           list.push(x);
@@ -6603,11 +6824,12 @@ body.picker-open .set-bg.on{opacity:.15}
   }
 
   /* список «что именно перекрасить»: у кнопки это фон, фон при наведении,
-     граница и текст — четыре разные переменные темы */
+     граница и текст — четыре разные переменные темы.
+     res.title/res.text необязательны: их подставляет окно цвета меток (3.2). */
   function openDesignerChooser(res) {
     var t = themeStore();
-    var html = '<h2>🎨 Что перекрасить?</h2>' +
-      '<p>Этот элемент формируют несколько цветов темы. Выберите нужный — откроется пипетка.</p>' +
+    var html = '<h2>🎨 ' + esc(res.title || 'Что перекрасить?') + '</h2>' +
+      '<p>' + esc(res.text || 'Этот элемент формируют несколько цветов темы. Выберите нужный — откроется пипетка.') + '</p>' +
       '<div class="dpick">';
     res.vars.forEach(function (it, i) {
       var val = (it.sq !== undefined && it.sq !== null)
@@ -6634,6 +6856,46 @@ body.picker-open .set-bg.on{opacity:.15}
     });
     var cancel = box.querySelector('[data-a=cancel]');
     if (cancel) cancel.addEventListener('click', function () { closeModal(); });
+    return box;
+  }
+
+  /* ---------- окно цвета меток (3.2) ----------
+     Открывается удержанием правой кнопки мыши на одной клетке доски дольше
+     0.5 с: предлагает перекрасить то, что рисует правая кнопка, — круги и
+     стрелки разбора. Их четыре цвета чередуются по счёту меток; если на этой
+     клетке уже есть метка, её цвет предлагается первым. */
+  function openMarksChooser(sq) {
+    if (!T) return null;
+    var own = -1;
+    for (var i = 0; i < G.marks.length; i++) {
+      var x = G.marks[i];
+      if (x.from === sq || x.to === sq) { own = ((x.color || 0) % 4 + 4) % 4; break; }
+    }
+    var order = [0, 1, 2, 3];
+    if (own >= 0) order = [own].concat(order.filter(function (c) { return c !== own; }));
+    var vars = order.map(function (ci) {
+      var it = T.BY_VAR[MARK_VARS[ci]] || {};
+      return {
+        v: MARK_VARS[ci], n: it.n || MARK_VARS[ci], group: 'Доска и клетки',
+        label: ci === own
+          ? 'цвет метки на этой клетке'
+          : (ci === 0 ? 'следующая метка, если стёрто всё' : 'чередуется по счёту меток')
+      };
+    });
+    sfx('click');
+    var box = openDesignerChooser({
+      vars: vars,
+      title: 'Цвет стрелок и меток',
+      text: 'Правая кнопка рисует на доске круги и стрелки — их цвета чередуются по счёту. ' +
+        'Выберите, какой перекрасить: откроется та же пипетка, что и в настройках. ' +
+        'Это окно открывается удержанием правой кнопки на одной клетке (≈0,5 с).'
+    });
+    /* кнопку отпускают уже над окном: на Windows в этот момент стреляет
+       contextmenu — не отдаём его браузеру */
+    if (box && box.parentNode) {
+      box.parentNode.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+    }
+    return box;
   }
 
   /* сброс элемента под курсором: убираем его переопределения из темы */
@@ -6707,10 +6969,14 @@ body.picker-open .set-bg.on{opacity:.15}
     document.addEventListener('pointerover', function (e) { if (designerActive()) designerHover(e); }, true);
     document.addEventListener('pointerdown', function (e) {
       if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      /* правую кнопку пропускаем на доску: её удержание открывает окно цвета
+         меток и в режиме дизайнера (startMarkDrag ставит флаг noDraw) */
+      if (e.button === 2) return;
       e.stopPropagation();
     }, true);
     document.addEventListener('mousedown', function (e) {
       if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      if (e.button === 2) return;
       e.stopPropagation();
     }, true);
     document.addEventListener('click', function (e) { if (designerActive()) designerClick(e); }, true);
@@ -6776,6 +7042,7 @@ body.picker-open .set-bg.on{opacity:.15}
   }
 
   var CHANGELOG = [
+    ['3.2', 'Цвета фигур и стрелок, удержание правой кнопки, Rodent V. В теме появились две новые группы: «Фигуры» (заливка и контур белых, заливка, контур и светлые детали чёрных) и четыре цвета стрелок разбора в группе «Доска и клетки» — всего 81 настраиваемый элемент в шести группах. Фигуры перекрашиваются целиком: спрайт собирается с var(--pc-*), значения по умолчанию равны цветам Cburnett, поэтому классический вид не меняется. Цвет стрелок и кругов правой кнопки теперь тоже живёт в теме и применяется мгновенно. Новый способ добраться до цвета: удерживайте правую кнопку мыши на одной клетке доски дольше ~0,5 секунды (золотое кольцо покажет, что удержание засчитано) — откроется окно «Цвет стрелок и меток», где цвет метки на этой клетке предлагается первым; короткое нажатие и тяга к другой клетке работают как раньше (круг и стрелка), а уход курсора на другую клетку отменяет удержание. В режиме дизайнера клетка с фигурой предлагает и её цвета, а золотая подсветка переменной обводит сами фигуры или клетки с метками нужного цвета. Исправлено: HEX-поле в пипетке растягивалось на всю строку и вылезало за правый край окна (правило input.inp{width:100%} перебивало .cp-hex) — теперь поле фиксированной ширины, а подсказка рядом обрезается многоточием. Rodent V (2026, Go + NNUE, ~3400 CCRL Elo, GPL) проверен живым рукопожатием: приложение читает id name/id author и показывает, как движок представился, разбирает его настоящие опции (Hash, Clear Hash, UCI_Chess960, UCI_LimitStrength, UCI_Elo 800…3000, OwnBook, Threads, MultiPV, PersonalityFile) и водит протокол в прежнем порядке; пресеты силы работают командой go, поэтому подходят и IV, и V. Карточка движка переименована в «Rodent IV / V», добавлена кнопка «↗ Rodent V» на страницу релизов, справка переписана под оба поколения и объясняет, что архив распаковывается на диск целиком, а в приложение указывается один исполняемый файл (соседние папки personalities/nets/books движок читает сам — рабочая папка процесса равна папке exe; в обёртке Tauri рабочая папка теперь выставляется так же, как в Electron). Браузер больше не принимает архивы движка с внятным сообщением: нужен один файл .wasm/.js.'],
     ['3.1', 'Режим дизайнера: цвета теперь меняются кликом по самому интерфейсу. В настройках (⚙) → «Цвета» появилась кнопка «🖌 Режим дизайнера»: окно настроек закрывается, под курсором возникает рамка с названием цветов, которые формируют элемент, а клик открывает список «что именно перекрасить» и пипетку HSL. Карту «элемент → цвет» приложение строит разбором собственного CSS, поэтому она не разъезжается со стилями и покрывает все 72 элемента; при открытии пипетки все элементы, которые красит эта переменная, на полторы секунды обводятся золотом, а фон пипетки и окно настроек становятся полупрозрачными — изменение видно вживую, а не на затемнённом фоне; обычные действия (вкладки, кнопки, ходы) остаются доступны с зажатым левым Shift, выход — Esc в любом месте, а кнопка «↺ Сбросить элемент» убирает переопределения у элемента под курсором. Внизу окна настроек добавлена кнопка «⏻ Выход»: в версии для компьютера она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика), гасит процесс движка и сохраняет партию; в браузере кнопка скрыта. Rodent IV: JS-обвязка Web Worker вшита в единый файл, поэтому WASM-сборку можно добавить и без интернета; исполняемый файл в десктопе теперь считается установленным (кнопки «Использовать», «Проверить», «Удалить» работают), путь запоминается и движок сам поднимается при следующем открытии приложения; список опций читается из рукопожатия UCI — настоящие имена, типы, пределы, галочки, списки «личностей» и кнопки; команды протокола идут в правильном порядке (setoption → ucinewgame → position → go, причём ucinewgame посылается один раз на партию), а при сбое запуска приложение честно возвращается к встроенному боту и пишет причину в журнал UCI. Заодно исправлено: выбранный движок и путь к его файлу терялись при перезапуске (настройки собирались по белому списку ключей), а смена уровня «Лёгкий/Средний/Сильный» не доходила до внешнего движка — теперь уровень применяется как пресет UCI и не затирает настроенные вручную параметры. Справка дополнена разделами о цветах и выходе; подготовлен задел под настройку цвета фигур (переменные --pc-* и сборочный флаг PIECE_THEME — включим в 3.2 после проверки в браузере).'],
     ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
     ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
@@ -6788,7 +7055,7 @@ body.picker-open .set-bg.on{opacity:.15}
     ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
     ['2.4', 'Меню приложения «⋮» пересобрано в полноценное окно настроек с категориями: Вид, Архив, Движок, Журнал, Справка и О программе — переход кликом по категории или обычной прокруткой, ползунок окна стилизован под дизайн приложения. Вкладки «Журнал» и «Движок» переехали из бокового меню в настройки; «Перевернуть доску» осталось во вкладке «Ходы»; дубли кнопок (новая партия, вернуть ход, сохранение, выгрузка, стрелки, FEN/PGN, Lichess) убраны — они уже есть в основном меню. Подсказки кнопок переведены в один верхний слой с переносом текста: больше не появляются горизонтальные ползунки и описания не прячутся под вкладки. Напоминание о выгрузке архива можно отключить (настройки → «Архив»). Ошибка проверки обновлений больше не вываливает простыню HTTP-заголовков: короткое сообщение, полный текст — в раскрывающемся блоке «Технические подробности».'],
     ['3.0', 'Дизайнерское обновление: полная настройка цветов. В окне настроек (⚙) появилась категория «Цвета»: 72 элемента интерфейса и доски в пяти раскрывающихся группах — фон и панели, текст и акценты, кнопки и ползунки, доска (клетки, рамка, координаты, подсветки хода, шаха и взятия, тень фигур), а также подсказки, диалог превращения, кнопка Lichess, логотип, плашка просмотра истории и шкала квоты архива. У каждого элемента — HSL-пипетка с готовой палитрой из 36 образцов, HEX-полем, прозрачностью и двухцветными градиентами с настройкой угла; раздел доступен и с клавиатуры (Tab, Enter). Семь готовых палитр: Классика, Лёд, Изумруд, Сепия, Виолет, Багрянец, Графит. Точечная раскраска отдельных клеток a1…h8 с привязкой к полям доски — в расширенном режиме (по умолчанию выключен). Экспорт и импорт темы в JSON с отбрасыванием недопустимых значений, сброс отдельного элемента и всей темы; изменения применяются мгновенно с живым предпросмотром, «Отмена» и Esc возвращают прежний цвет. Обёртка Tauri доведена до собираемого состояния: Cargo.toml, build.rs, capabilities, мост window.Chesster, отдельная папка dist для фронтенда; оценка и план переноса — в TAURI.md.'],
-    ['план', 'Цвет шахматных фигур в теме (задел сделан: переменные --pc-* и флаг PIECE_THEME в build.js — включим после проверки в настоящем браузере); лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md).'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md); передача аргументов командной строки внешнему движку (режим alloptions у Rodent V).'],
   ];
   function showChangelog() { openSettings('help'); }
   function showAbout() { openSettings('about'); }
@@ -7373,13 +7640,13 @@ body.picker-open .set-bg.on{opacity:.15}
     '<li><b>Недостаточно материала</b> — мат невозможен в принципе.</li>' +
     '<li><b>По соглашению</b> — кнопка ½ под доской.</li>' +
     '<li><b>Сдача</b> — кнопка ⚑ под доской: поражение стороны, чей ход.</li></ul>' +
-    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
+    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Удерживайте правую кнопку на одной клетке дольше ~0,5 секунды</b> — откроется окно «Цвет стрелок и меток»: четыре чередующихся цвета настраиваются пипеткой, цвет метки на этой клетке предлагается первым (кольцо на клетке показывает, что удержание засчитано). <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
     '<h3>Архив партий</h3><p>После завершения партии предлагается сохранить её в архив: можно задать название и имена игроков. Сохранённую партию можно воспроизвести на доске, посмотреть её PGN, переименовать или удалить. Имена складываются в профили: сыграно, победы, ничьи, поражения, процент очков, маты, сдачи, личные встречи.</p>' +
     '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать партии без имени (анонимные) в статистике» в настройках (⚙ → «Архив») разрешает или запрещает такой учёт, а кнопка «Очистить анонима» на вкладке «Профили» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
     '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается в настройках (⚙ → «Архив»), там же напоминания можно отключить.</p>' +
     '<h3>Импорт PGN</h3><p>Кнопка «⬆ Импорт» принимает текст или файл с партиями. При импорте предлагается выбрать, учитывать ли эти партии в статистике профилей.</p>' +
-    '<h3>Цвета и режим дизайнера</h3><p>Настройки (⚙) → «Цвета»: 72 элемента интерфейса и доски в пяти группах, у каждого — пипетка HSL с палитрой, HEX-кодом, прозрачностью и градиентами. Если не знаете, как элемент называется, включите <b>«🖌 Режим дизайнера»</b>: окно настроек закроется, под курсором появится рамка с названием цветов, а клик откроет список «что именно перекрасить» и пипетку. Обычные действия элементов остаются доступны с зажатым <b>левым Shift</b>, выход — <span class="kbd">Esc</span> в любом месте. Кнопка «↺ Сбросить элемент» в плашке режима убирает переопределения у элемента под курсором.</p>' +
-    '<h3>Выход из приложения</h3><p>В версии для компьютера внизу окна настроек есть кнопка <b>«⏻ Выход»</b>: она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика). Партия, архив, статистика и тема сохраняются автоматически, а процесс внешнего движка (Rodent IV) завершается вместе с окном. В браузере кнопка скрыта: вкладку закрывают обычным способом (<span class="kbd">Ctrl+W</span>).</p>' +
+    '<h3>Цвета и режим дизайнера</h3><p>Настройки (⚙) → «Цвета»: 81 элемент интерфейса и доски в шести группах (включая цвета фигур и четыре цвета стрелок разбора), у каждого — пипетка HSL с палитрой, HEX-кодом, прозрачностью и градиентами. Если не знаете, как элемент называется, включите <b>«🖌 Режим дизайнера»</b>: окно настроек закроется, под курсором появится рамка с названием цветов, а клик откроет список «что именно перекрасить» и пипетку. Обычные действия элементов остаются доступны с зажатым <b>левым Shift</b>, выход — <span class="kbd">Esc</span> в любом месте. Кнопка «↺ Сбросить элемент» в плашке режима убирает переопределения у элемента под курсором.</p>' +
+    '<h3>Выход из приложения</h3><p>В версии для компьютера внизу окна настроек есть кнопка <b>«⏻ Выход»</b>: она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика). Партия, архив, статистика и тема сохраняются автоматически, а процесс внешнего движка (Rodent) завершается вместе с окном. В браузере кнопка скрыта: вкладку закрывают обычным способом (<span class="kbd">Ctrl+W</span>).</p>' +
     '<h3>Горячие клавиши</h3><p><span class="kbd">←</span> <span class="kbd">→</span> — разбор ходов, <span class="kbd">↑</span> <span class="kbd">↓</span> — в начало/конец, <span class="kbd">F</span> — перевернуть доску, <span class="kbd">Z</span> — вернуть ход, <span class="kbd">N</span> — новая партия, <span class="kbd">M</span> — боковое меню, <span class="kbd">F11</span> — полный экран, <span class="kbd">Esc</span> — снять выделение, закрыть окно или выйти из режима дизайнера.</p>' +
     '<h3>Правила полностью</h3><p>Рокировка (включая запрет при шахе и через битое поле), взятие на проходе, превращение пешки с выбором фигуры, запрет ходов, оставляющих своего короля под шахом. Движок сверен с эталонным perft до 5-й глубины.</p>';
 
@@ -8003,7 +8270,7 @@ body.picker-open .set-bg.on{opacity:.15}
     $('rodentFile').onchange = function () { onEngineFile($('rodentFile')); };
     $('btnRodentExe').onclick = function () {
       if (!P.nativeEngineAvailable()) {
-        toast('ТОЛЬКО В ДЕСКТОП-ВЕРСИИ', 'info', 'в браузере Rodent IV подключается своей WASM-сборкой через поле выше');
+        toast('ТОЛЬКО В ДЕСКТОП-ВЕРСИИ', 'info', 'в браузере движок подключается своей WASM-сборкой через поле выше');
         return;
       }
       P.pickEngineFile().then(function (res) {
@@ -8013,11 +8280,13 @@ body.picker-open .set-bg.on{opacity:.15}
           pushEngineLog('движок запущен: ' + JSON.stringify(r));
           S.setSettings({ engine: 'rodent4', engineExe: res.path });
           E.newGame();
+          var idn = E.engineIdentity('rodent4');
+          var nm = (idn && idn.name) ? idn.name : 'Rodent';
           var n = E.detectedOptions('rodent4').length;
           if (n) pushEngineLog('опции движка получены: ' + E.detectedOptions('rodent4').map(function (o) { return o.name; }).join(', '));
-          addLog('<b>Rodent IV запущен как процесс</b> (' + esc(res.path) + ')' +
+          addLog('<b>' + esc(nm) + ' запущен как процесс</b> (' + esc(res.path) + ')' +
             (n ? ' — движок объявил опций: ' + n : '') + '.', 'arch');
-          toast('RODENT IV ЗАПУЩЕН', 'arch', n ? 'нативный процесс · опций получено: ' + n : 'нативный процесс, UCI-поток подключён');
+          toast(nm.toUpperCase() + ' ЗАПУЩЕН', 'arch', n ? 'нативный процесс · опций получено: ' + n : 'нативный процесс, UCI-поток подключён');
           sfx('save');
           render();
         });
@@ -8030,6 +8299,8 @@ body.picker-open .set-bg.on{opacity:.15}
     };
     $('btnRodentSite').onclick = function () { openRodentUrl('site'); };
     $('btnRodentRepo').onclick = function () { openRodentUrl('repo'); };
+    var bv = $('btnRodentV');
+    if (bv) bv.onclick = function () { openRodentUrl('vrel'); };
     $('btnRodentUse').onclick = useRodent;
     $('btnRodentTest').onclick = function () { testEngine('rodent4'); };
     $('btnRodentDel').onclick = function () { deleteEngine('rodent4'); };
@@ -8252,6 +8523,9 @@ body.picker-open .set-bg.on{opacity:.15}
     importTheme: importTheme, themeStore: themeStore, flashThemeTargets: flashThemeTargets,
     /* режим дизайнера (3.1): красим интерфейс кликом по нему */
     startDesigner: startDesigner, stopDesigner: stopDesigner, designerActive: designerActive,
+    /* цвет меток и удержание правой кнопки (3.2) */
+    openMarksChooser: openMarksChooser, markStyle: markStyle, MARK_VARS: MARK_VARS,
+    MARK_HOLD_MS: MARK_HOLD_MS, rodentDisplayName: rodentDisplayName,
     restoreEngineChoice: restoreEngineChoice, RODENT_URLS: RODENT_URLS,
     designerFor: designerFor, resetDesignerElement: resetDesignerElement, quitApp: quitApp,
     restoreNativeEngine: restoreNativeEngine,

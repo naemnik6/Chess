@@ -1,6 +1,6 @@
 [package]
 name = "chesster"
-version = "3.1.0"
+version = "3.2.0"
 description = "Chess for both sides - desktop wrapper (Tauri v2)"
 authors = ["naemnik6"]
 edition = "2021"

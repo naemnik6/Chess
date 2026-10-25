@@ -4,7 +4,7 @@
    Сегодня: встроенный JS-бот (негамакс + альфа-бета) — работает везде,
    ничего не скачивает.
 
-   Задел на будущее: внешние UCI-движки, в первую очередь Rodent IV.
+   Задел на будущее: внешние UCI-движки, в первую очередь Rodent IV и Rodent V.
    Для них уже prepared всё, кроме самого бинарника:
      • каталог движков в хранилище (IndexedDB, а не localStorage — архив
        партий и движки не должны бороться за одно место);
@@ -12,11 +12,15 @@
      • транспорт (Web Worker + WASM/asm.js + polyfill Node для UCI-сборок);
      • протокол UCI поверх postMessage: uci/isready/ucinewgame/position/go/stop;
      • настройка уровня через ограниченные глубину/узлы/время и MultiPV,
-       а для Rodent IV — ещё и через его собственные personality-параметры.
+       а для Rodent — ещё и через его собственные personality-параметры
+       (у Rodent V это PersonalityFile, UCI_LimitStrength и UCI_Elo).
 
-   Rodent IV распространяется как Windows-исполняемый файл с собственным
-   лицензионным соглашением, поэтому в веб-сборку он не вкладывается:
-   пользователь добавляет свою копию, а приложение хранит её локально.
+   Rodent распространяется как исполняемый файл (GPL), поэтому в веб-сборку
+   он не вкладывается: пользователь добавляет свою копию, а приложение хранит
+   её локально. Rodent V (2026, на Go, NNUE, ~3400 CCRL) проверялся живым
+   рукопожатием: id name / 9 опций / info / bestmove — формат строк тот же,
+   что у Rodent IV, разбор протокола общий. Рабочая папка процесса — папка
+   exe, поэтому соседние подпапки personalities/nets/books движок находит сам.
    ========================================================================= */
 (function (root, factory) {
   var isNode = typeof module === 'object' && module.exports;
@@ -47,33 +51,43 @@
     },
     {
       id: 'rodent4',
-      name: 'Rodent IV',
+      name: 'Rodent IV / V',
       kind: 'uci',
       available: false,          /* появится, когда пользователь добавит свою сборку */
       bundled: false,
-      strength: '~2600-3000 Elo (зависит от сборки и «личности»)',
-      about: 'Сильный открытый движок Pawła Koziol. Для запуска в браузере нужна сборка, ' +
-        'скомпилированная в WebAssembly или asm.js и работающая в Web Worker. В веб-версию ' +
-        'движок не вкладывается: добавьте свой файл — он сохранится локально в этом устройстве ' +
-        '(IndexedDB), никуда не отправляется и не занимает место архива партий.',
-      homepage: 'http://rodentchess.blogspot.com/',
+      strength: 'IV: ~2600-3000 Elo · V: ~3400-3470 Elo (CCRL, зависит от «личности»)',
+      about: 'Открытые движки Павла Козёля (GPL): Rodent IV и его продолжение Rodent V (на Go, ' +
+        'с нейросетевой оценкой NNUE, ~3400 Elo). Оба говорят по протоколу UCI, поэтому ' +
+        'подключаются одинаково: в десктопе — исполняемый файл (процесс поднимает обёртка, ' +
+        'рабочая папка — папка движка, поэтому соседние personalities/nets/books он находит сам); ' +
+        'в браузере — сборка, скомпилированная в WebAssembly/asm.js. Rodent V выходит только ' +
+        'исполняемым файлом — веб-сборки у него нет. В приложение движок не вложен: вы добавляете ' +
+        'свою копию, она остаётся на вашем устройстве (IndexedDB или путь к exe) и никуда не отправляется.',
+      homepage: 'https://github.com/nescitus/Rodent-V',
       /* что именно ждём от пользователя */
       accepts: [
-        { ext: '.wasm', label: 'сборка Rodent IV в WebAssembly' },
-        { ext: '.js', label: 'asm.js-сборка с UCI-интерфейсом' },
-        { ext: '.zip', label: 'архив со сборкой и файлом движка' }
+        { ext: '.wasm', label: 'сборка движка в WebAssembly (браузер)' },
+        { ext: '.js', label: 'asm.js-сборка с UCI-интерфейсом (браузер)' },
+        { ext: '.exe', label: 'исполняемый файл Rodent IV или V (десктоп)' }
       ],
-      /* UCI-опции, которыми настраивается сила и стиль Rodent IV */
+      /* UCI-опции, которыми настраиваются сила и стиль. Список — запасной:
+         настоящие опции читаются из рукопожатия uciok. Здесь типовые имена
+         обоих поколений: PersonalityFile есть и у IV, и у V; UCI_LimitStrength
+         и UCI_Elo (800…3000) появились в Rodent V 1.1+. */
       uciOptions: [
         { name: 'DepthLimit', type: 'spin', min: 1, max: 40, label: 'Ограничение глубины' },
         { name: 'NodeLimit', type: 'spin', min: 0, max: 100000000, label: 'Ограничение по узлам' },
         { name: 'MoveTime', type: 'spin', min: 0, max: 60000, label: 'Время на ход, мс' },
         { name: 'MultiPV', type: 'spin', min: 1, max: 8, label: 'Число вариантов (MultiPV)' },
         { name: 'Personality', type: 'combo', label: 'Стиль игры (личность)' },
+        { name: 'PersonalityFile', type: 'string', label: 'Файл «личности» (Rodent V)' },
+        { name: 'UCI_LimitStrength', type: 'check', label: 'Ограничить силу (Rodent V)' },
+        { name: 'UCI_Elo', type: 'spin', min: 800, max: 3000, label: 'Уровень Elo (Rodent V)' },
         { name: 'Threads', type: 'spin', min: 1, max: 16, label: 'Потоки' },
         { name: 'Hash', type: 'spin', min: 1, max: 1024, label: 'Хэш, МБ' }
       ],
-      /* готовые пресеты под наши уровни, чтобы переключение было привычным */
+      /* готовые пресеты под наши уровни, чтобы переключение было привычным.
+         Это параметры команды go — их понимает любой UCI-движок, и IV, и V */
       presets: {
         easy: { DepthLimit: 3, MoveTime: 400, MultiPV: 1 },
         medium: { DepthLimit: 8, MoveTime: 1500, MultiPV: 1 },
@@ -94,6 +108,7 @@
     installed: {},        /* id -> {size, added, name, note, native?, path?} */
     options: {},          /* id -> {опция: значение} */
     detected: {},         /* id -> опции, которые движок сам назвал при рукопожатии */
+    idInfo: {},           /* id -> {name, author}: как движок представился (id name / id author) */
     worker: null,
     native: false,
     ready: false,
@@ -267,6 +282,15 @@
   function handleUciLine(line) {
     line = String(line || '').trim();
     if (!line) return;
+    /* движок представляется сам: «id name Rodent V 1.2 AVX2», «id author …».
+       Имя показываем в карточке — сразу видно, какое поколение подключено (3.2) */
+    var idm = /^id\s+(name|author)\s+(.+)$/i.exec(line);
+    if (idm) {
+      var slot = state.idInfo[state.active] || (state.idInfo[state.active] = {});
+      slot[idm[1].toLowerCase()] = idm[2].trim();
+      emit('status', { log: line });
+      return;
+    }
     if (/^option\s+name\s+/i.test(line)) {
       var op = parseUciOption(line);
       if (op) {
@@ -310,6 +334,9 @@
 
   /* опции, которые движок назвал сам (пусто, если рукопожатия ещё не было) */
   function detectedOptions(id) { return (state.detected[id || state.active] || []).slice(); }
+
+  /* как движок представился при рукопожатии: {name, author} или null */
+  function engineIdentity(id) { return state.idInfo[id || state.active] || null; }
 
   /* (пере)послать параметры UCI: делается перед первым поиском и после смены
      пресета, а не на каждом ходу — движки этого не любят */
@@ -357,6 +384,7 @@
       state.needNewGame = true;
       state.optsDirty = true;
       state.detected[id] = [];
+      state.idInfo[id] = null;
       w.onmessage = function (e) {
         var d = e.data || {};
         if (d.type === 'ready') { state.ready = true; emit('status', { ready: true, id: id }); }
@@ -407,6 +435,7 @@
       state.needNewGame = true;
       state.optsDirty = true;
       state.detected.rodent4 = [];
+      state.idInfo.rodent4 = null;
       if (!state.nativeWired) {
         state.nativeWired = true;
         P.onEngineLine(handleUciLine);
@@ -565,6 +594,7 @@
     /* нативный движок (исполняемый файл обёртки) и опции из рукопожатия UCI */
     isNative: isNative, nativePath: nativePath, registerNative: registerNative,
     detectedOptions: detectedOptions, parseUciOption: parseUciOption, newGame: newGame,
+    engineIdentity: engineIdentity, handleUciLine: handleUciLine,
     searchMove: searchMove, stopSearch: stopSearch,
     activeId: activeId, setActive: setActive, status: status
   };

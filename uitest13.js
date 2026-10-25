@@ -53,9 +53,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
   console.log('\n— 3.0: модуль темы (реестр, утилиты, санитизация) —');
   ok(!!T, 'модуль Theme доступен глобально');
-  ok(T && T.GROUPS.length === 5, 'пять групп элементов: ' + (T ? T.GROUPS.map(g => g.name).join(' / ') : ''));
+  ok(T && T.GROUPS.length === 6, 'шесть групп элементов: ' + (T ? T.GROUPS.map(g => g.name).join(' / ') : ''));
   const totalItems = T ? T.GROUPS.reduce((n, g) => n + g.items.length, 0) : 0;
-  ok(totalItems === 72, 'в реестре 72 настраиваемых элемента (факт: ' + totalItems + ')');
+  ok(totalItems === 81, 'в реестре 81 настраиваемый элемент (факт: ' + totalItems + ')');
   ok(T && Object.keys(T.DEFAULTS).length === totalItems &&
     T.GROUPS.every(g => g.items.every(it => T.BY_VAR[it.v] === it)),
     'реестр, DEFAULTS и индекс BY_VAR согласованы (без дублей и сирот)');
@@ -120,8 +120,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   App.openSettings('colors');
   ok(App.settingsOpen() && q('#setNav button.on').dataset.sc === 'colors', 'открытие настроек на категории «Цвета»');
   ok(qa('#themePresets [data-preset]').length === 7, 'ряд готовых палитр: 7 кнопок');
-  ok(qa('#themeGroups .tgroup').length === 5 && qa('#themeGroups .titem').length === 72,
-    'раскрывающихся групп 5, элементов 72');
+  ok(qa('#themeGroups .tgroup').length === 6 && qa('#themeGroups .titem').length === 81,
+    'раскрывающихся групп 6, элементов 81');
   ok(qa('#themeGroups .titem .tsw').every(b => b.getAttribute('tabindex') !== '-1' && b.tagName === 'BUTTON'),
     'образцы цвета — настоящие кнопки: раздел доступен с клавиатуры');
   ok(qa('#themeGroups details.tgroup').every(d => d.tagName === 'DETAILS'), 'группы свёрнуты (details) — раздел компактный');
@@ -355,8 +355,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const drift = Object.keys(T.DEFAULTS).filter(k => !(k in declared) || norm(declared[k]) !== norm(T.DEFAULTS[k]));
   ok(drift.length === 0, 'значения по умолчанию в theme.js совпадают с :root (' + Object.keys(T.DEFAULTS).length +
     ' переменных)' + (drift.length ? ': ' + drift.join(', ') : ''));
-  /* переменная может применяться и в стилях, и в разметке, которую собирает app.js */
-  const scope = css.replace(rootBlock, '') + '\n' + appSrc;
+  /* переменная может применяться в стилях, в разметке app.js и в спрайте фигур,
+     который build.js собирает из pieces/*.svg (var(--pc-*) живут там) */
+  const scope = css.replace(rootBlock, '') + '\n' + appSrc + '\n' + html.replace(css, '');
   /* строгая проверка: var(--panel) и var(--panel2) — разные переменные,
      поэтому смотрим на закрывающий символ, а не на префикс имени */
   const usedVar = k => new RegExp('var\\(' + k.replace(/-/g, '\\-') + '[),\\s]').test(scope);

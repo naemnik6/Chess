@@ -36,12 +36,16 @@
   --playback-bg:linear-gradient(180deg,#2a2140,#1d1730); --playback-line:#4b3d75; --playback-text:#dccfff;
   --qbar-bg:#0e1322; --qbar-line:#26304f;
   --arch-text:#c0aef5;
-  /* задел под настройку цвета фигур (план 3.2): значения в точности равны
-     цветам спрайта Cburnett, а правила, которые их применяют, включаются
-     только классом body.pc-theme и сборочным флагом PIECE_THEME в build.js.
-     Поэтому сейчас вид фигур не меняется — переменные просто уже на месте. */
+  /* цвета фигур (3.2): значения в точности равны цветам спрайта Cburnett,
+     поэтому включение не меняет классический вид. Спрайт собирается build.js
+     с флагом PIECE_THEME: явные fill/stroke фигур заменяются на var(--pc-*),
+     а неявная заливка (чёрные ферзь, ладья, пешка) наследуется от <use>,
+     которому app.js задаёт fill:var(--pc-b-fill). */
   --pc-w-fill:#ffffff; --pc-w-line:#000000;
   --pc-b-fill:#000000; --pc-b-line:#000000; --pc-b-hi:#ececec;
+  /* стрелки и круги правой кнопки мыши (3.2): четыре чередующихся цвета,
+     значения равны прежним хардкод-цветам app.js — вид не меняется */
+  --mark-1:#3aa0ff; --mark-2:#ffb02e; --mark-3:#ff5f5f; --mark-4:#57d97a;
   --r:12px;
 }
 *{box-sizing:border-box}
@@ -208,6 +212,15 @@ main{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:n
   background:radial-gradient(circle at 50% 50%, transparent 30%, var(--hl-check1) 62%, var(--hl-check2) 100%);
   animation:checkPulse 1.5s ease-in-out infinite}
 @keyframes checkPulse{0%,100%{opacity:.82}50%{opacity:1}}
+/* индикатор удержания правой кнопки (3.2): золотое кольцо нарастает ровно
+   столько, сколько нужно держать кнопку, чтобы открыть выбор цвета меток.
+   Без !important — иначе анимация не сможет погаснуть (урок .flash-var). */
+.sq.hold-ring::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:2px;z-index:4;
+  animation:holdRing .5s linear forwards}
+@keyframes holdRing{
+  from{box-shadow:inset 0 0 0 0 rgba(242,193,78,0);opacity:.4}
+  to{box-shadow:inset 0 0 0 4px var(--gold,#f2c14e);opacity:.95}
+}
 .board.locked .sq{cursor:default}
 
 /* стрелки правой кнопкой мыши */
@@ -660,7 +673,10 @@ body.desktop .set-scroll{padding:18px 22px 24px}
 .cp-row input[type=range]::-moz-range-track{height:10px;border-radius:6px;border:1px solid var(--line);background:var(--cp-track,#2a3050)}
 .cp-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #22273c}
 .cp-num{flex:0 0 46px;text-align:right;font-size:11.4px;color:var(--text);font-variant-numeric:tabular-nums}
-.cp-hex{width:112px;flex:0 0 auto}
+/* Специальность выше, чем у базового input.inp{width:100%}: иначе HEX-поле
+   растягивалось на всю строку и вылезало за правый край окна (3.2). */
+input.inp.cp-hex{width:112px;flex:0 1 112px;min-width:76px}
+.cp-row.hexrow .cp-target-hint{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-stops{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
 .cp-stop{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--ctl-bg);
   color:var(--text);border-radius:9px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}

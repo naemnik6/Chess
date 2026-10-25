@@ -125,6 +125,11 @@ fn pick_engine(app: AppHandle) -> Result<serde_json::Value, String> {
 fn engine_spawn(app: AppHandle, state: State<EngineState>, exe: String) -> Result<u32, String> {
     kill_engine(&state);                    /* как в Electron: один движок за раз */
     let mut cmd = Command::new(&exe);
+    /* рабочая папка процесса — папка движка (как в Electron): Rodent V ищет
+       personalities/nets/books по относительным путям рядом с собой */
+    if let Some(parent) = std::path::Path::new(&exe).parent() {
+        cmd.current_dir(parent);
+    }
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());

@@ -34,7 +34,7 @@
     thinking: false, gen: 0,
     tab: 'moves',
     openEngine: null,     /* раскрытая карточка движка */
-    /* JS-обвязка потока для внешнего UCI-движка (Rodent IV в WASM): сборщик
+    /* JS-обвязка потока для внешнего UCI-движка (Rodent в WASM): сборщик
        заменяет весь этот строковый литерал на текст desktop/rodent4-worker.js,
        поэтому приложение остаётся одним файлом и запускает движок без интернета */
     workerSource: '/*@ENGINEWORKER@*/',
@@ -123,8 +123,16 @@
   /* ============================ ФИГУРЫ (SVG) ============================ */
   function pieceHTML(pc, cls) {
     if (!pc) return '';
-    var id = 'pc-' + (pc === pc.toUpperCase() ? 'w' : 'b') + pc.toUpperCase();
-    return '<svg viewBox="0 0 45 45" class="' + (cls || 'pc') + '" aria-hidden="true"><use href="#' + id + '"/></svg>';
+    var w = pc === pc.toUpperCase();
+    var id = 'pc-' + (w ? 'w' : 'b') + pc.toUpperCase();
+    /* Цвет тела фигуры наследуется внутрь <use>: у чёрных ферзя, ладьи и пешки
+       в спрайте fill не задан явно, и они берут его отсюда. Явные fill/stroke
+       в спрайте заменены на var(--pc-*) сборщиком (флаг PIECE_THEME). Значения
+       по умолчанию равны цветам Cburnett — классический вид не меняется.
+       Классы pw/pb нужны подсветке «что красит эта переменная» (3.2). */
+    var fill = w ? 'var(--pc-w-fill,#fff)' : 'var(--pc-b-fill,#000)';
+    return '<svg viewBox="0 0 45 45" class="' + (cls || 'pc') + ' ' + (w ? 'pw' : 'pb') +
+      '" aria-hidden="true"><use href="#' + id + '" style="fill:' + fill + '"/></svg>';
   }
 
   /* ============================ ДОСКА ============================ */
@@ -201,16 +209,27 @@
   }
 
   /* ============================ СТРЕЛКИ ПРАВОЙ КНОПКОЙ ============================ */
-  var ARROW_COLORS = ['#3aa0ff', '#ffb02e', '#ff5f5f', '#57d97a'];
+  /* Цвета меток живут в теме (--mark-1…4 в :root и в реестре): SVG-элементы
+     получают var() прямо в style, поэтому перекраска применяется мгновенно и
+     без перерисовки, а значения по умолчанию равны прежним хардкод-цветам. */
+  var MARK_VARS = ['--mark-1', '--mark-2', '--mark-3', '--mark-4'];
+  var MARK_STYLE = [
+    'var(--mark-1,#3aa0ff)', 'var(--mark-2,#ffb02e)',
+    'var(--mark-3,#ff5f5f)', 'var(--mark-4,#57d97a)'
+  ];
+  /* удержание правой кнопки на одной клетке открывает выбор цвета меток (3.2) */
+  var MARK_HOLD_MS = 500;
   var markDrag = null;
+
+  function markStyle(i) { return MARK_STYLE[(((i || 0) % 4) + 4) % 4]; }
 
   function markSVG(m) {
     if (!m) return '';
-    var color = ARROW_COLORS[(m.color || 0) % ARROW_COLORS.length];
+    var color = markStyle(m.color);
     var a = centerOf(m.from);
     if (m.type === 'circle' || m.from === m.to) {
       return '<circle cx="' + n3(a.x) + '" cy="' + n3(a.y) + '" r="0.42" fill="none" ' +
-        'stroke="' + color + '" stroke-width="0.11" opacity="0.9"/>';
+        'style="stroke:' + color + '" stroke-width="0.11" opacity="0.9"/>';
     }
     var b = centerOf(m.to);
     var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy);
@@ -222,9 +241,9 @@
     var sx = a.x + ux * 0.1, sy = a.y + uy * 0.1;
     var px = -uy * half, py = ux * half;
     return '<line x1="' + n3(sx) + '" y1="' + n3(sy) + '" x2="' + n3(bx) + '" y2="' + n3(by) +
-      '" stroke="' + color + '" stroke-width="0.14" stroke-linecap="round" opacity="0.9"/>' +
+      '" style="stroke:' + color + '" stroke-width="0.14" stroke-linecap="round" opacity="0.9"/>' +
       '<polygon points="' + n3(tx) + ',' + n3(ty) + ' ' + n3(bx + px) + ',' + n3(by + py) + ' ' +
-      n3(bx - px) + ',' + n3(by - py) + '" fill="' + color + '" opacity="0.9"/>';
+      n3(bx - px) + ',' + n3(by - py) + '" style="fill:' + color + '" opacity="0.9"/>';
   }
   function renderMarks(preview) {
     var layer = $('arrowLayer');
@@ -250,22 +269,43 @@
         G.marks.splice(i, 1); return;
       }
     }
-    m.color = G.marks.length % ARROW_COLORS.length;
+    m.color = G.marks.length % MARK_VARS.length;
     G.marks.push(m);
   }
+  /* Правая кнопка на доске: короткое нажатие — круг, тяга к другой клетке —
+     стрелка (как раньше), а удержание на одной клетке дольше MARK_HOLD_MS —
+     окно «цвет того, что рисуем» (3.2). Таймер снимается, как только курсор
+     уходит на другую клетку или за пределы доски: началась стрелка. */
   function startMarkDrag(e, sq) {
     endMarkDrag();
     if (e.preventDefault) e.preventDefault();
-    markDrag = { from: sq, x: e.clientX || 0, y: e.clientY || 0, moved: false };
+    markDrag = {
+      from: sq, x: e.clientX || 0, y: e.clientY || 0, moved: false,
+      held: false, holdTimer: setTimeout(onMarkHold, MARK_HOLD_MS),
+      noDraw: designerActive()      /* в режиме дизайнера метки не рисуются */
+    };
+    var cell = cellEls[sq];
+    if (cell && cell.el) {
+      cell.el.classList.remove('hold-ring');
+      void cell.el.offsetWidth;                 /* перезапуск анимации кольца */
+      cell.el.classList.add('hold-ring');
+    }
     window.addEventListener('pointermove', onMarkMove);
     window.addEventListener('pointerup', onMarkUp);
     window.addEventListener('pointercancel', onMarkUp);
     window.addEventListener('mousemove', onMarkMove);
     window.addEventListener('mouseup', onMarkUp);
   }
+  function clearHoldRing() {
+    for (var k in cellEls) {
+      try { cellEls[k].el.classList.remove('hold-ring'); } catch (e) { /* клетка ещё не построена */ }
+    }
+  }
   function endMarkDrag() {
     if (!markDrag) return;
+    if (markDrag.holdTimer) clearTimeout(markDrag.holdTimer);
     markDrag = null;
+    clearHoldRing();
     window.removeEventListener('pointermove', onMarkMove);
     window.removeEventListener('pointerup', onMarkUp);
     window.removeEventListener('pointercancel', onMarkUp);
@@ -273,19 +313,37 @@
     window.removeEventListener('mouseup', onMarkUp);
     renderMarks();
   }
+  function onMarkHold() {
+    var d = markDrag;
+    if (!d || d.held) return;
+    d.held = true;
+    if (d.holdTimer) { clearTimeout(d.holdTimer); d.holdTimer = null; }
+    clearHoldRing();
+    endMarkDrag();          /* снимаем слушатели: отпускание кнопки уже ничего не рисует */
+    openMarksChooser(d.from);
+  }
   function onMarkMove(e) {
     if (!markDrag) return;
     var x = e.clientX || 0, y = e.clientY || 0;
     if (Math.abs(x - markDrag.x) > 6 || Math.abs(y - markDrag.y) > 6) markDrag.moved = true;
     var to = sqFromPoint(x, y);
+    /* удержание действует, только пока курсор на той же клетке доски */
+    if (markDrag.holdTimer && (to < 0 || to !== markDrag.from)) {
+      clearTimeout(markDrag.holdTimer);
+      markDrag.holdTimer = null;
+      clearHoldRing();
+    }
+    if (markDrag.noDraw) return;
     if (to < 0) to = markDrag.from;
-    renderMarks(markDrag.moved ? { type: 'arrow', from: markDrag.from, to: to, color: G.marks.length % ARROW_COLORS.length } : null);
+    renderMarks(markDrag.moved ? { type: 'arrow', from: markDrag.from, to: to, color: G.marks.length % MARK_VARS.length } : null);
   }
   function onMarkUp(e) {
     var d = markDrag;
+    if (!d) return;
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     endMarkDrag();
-    if (!d) return;
+    if (d.held) return;      /* удержание уже открыло окно цвета — метку не ставим */
+    if (d.noDraw) return;    /* режим дизайнера: правая кнопка ничего не рисует */
     if (!d.moved || to < 0 || to === d.from) {
       /* правый клик без перетаскивания или внутри одной клетки — круг-пометка */
       toggleMark({ type: 'circle', from: d.from, to: d.from });
@@ -591,30 +649,37 @@
         'и посмотреть журнал UCI.</div>';
     }
 
-    /* блок Rodent IV */
+    /* блок Rodent IV / V */
     var r = E.byId('rodent4');
     var installed = E.isInstalled('rodent4');
     var info = E.installedInfo('rodent4');
     var native = installed && E.isNative('rodent4');
     var detN = E.detectedOptions('rodent4').length;
+    var ident = E.engineIdentity('rodent4');
+    var identLine = ident && ident.name
+      ? '<br>Движок представился: <b>' + esc(ident.name) + '</b>' +
+        (ident.author ? ' · ' + esc(ident.author) : '') : '';
     $('rodentInfo').innerHTML = installed
       ? (native
         ? ('Подключён исполняемый файл: <b>' + esc(info.name) + '</b> · добавлен ' +
            esc(String(info.added).slice(0, 16).replace('T', ' ')) + '<br>Путь: <code>' + esc(info.path || '') + '</code>' +
-           ' — запускается отдельным процессом обёртки, в хранилище браузера не копируется.' +
+           ' — запускается отдельным процессом обёртки (рабочая папка — папка движка), в хранилище браузера не копируется.' +
            (st.native ? '<br><b>Процесс запущен, UCI-поток подключён.</b>' : '<br>Процесс не запущен — нажмите «Проверить».') +
+           identLine +
            (detN ? '<br>Движок объявил опций: <b>' + detN + '</b> (видны в карточке движка).' : ''))
         : ('Установлен: <b>' + esc(info.name) + '</b> · ' +
            S.sizeLabel(info.size) + ' · добавлен ' +
            esc(String(info.added).slice(0, 16).replace('T', ' ')) +
            '<br>Хранится в ' + esc(info.storage) + ' — место архива партий не расходуется.' +
+           identLine +
            (detN ? '<br>Движок объявил опций: <b>' + detN + '</b>.' : ''))) +
         ((st.active === 'rodent4' && !native) ? '<br><b>Сейчас компьютер играет этим движком.</b>' : '') +
         ((st.active === 'rodent4' && native && st.native) ? '<br><b>Сейчас компьютер играет этим движком.</b>' : '')
       : ('Не установлен. Место подготовлено: каталог движков, UCI-транспорт (Web Worker для WASM-сборки ' +
          'и отдельный процесс для exe), разбор настоящих опций движка, настройка силы через ' +
-         'MoveTime/DepthLimit/NodeLimit и пресеты «Лёгкий/Средний/Сильный». Осталось добавить саму сборку: ' +
-         'в десктопе — исполняемый файл, в браузере — WASM.');
+         'MoveTime/DepthLimit/NodeLimit и пресеты «Лёгкий/Средний/Сильный». Осталось добавить сам движок: ' +
+         'в десктопе — исполняемый файл Rodent V или IV (архив распакуйте целиком в одну папку), ' +
+         'в браузере — WASM-сборку.');
     $('btnRodentUse').disabled = !installed;
     $('btnRodentTest').disabled = !installed;
     $('btnRodentDel').disabled = !installed;
@@ -622,8 +687,8 @@
     $('btnRodentExe').disabled = !nativeOk;
     $('btnRodentExe').innerHTML = native ? '\u{1F5A5} Перезапустить exe…' : '\u{1F5A5} Выбрать exe…';
     $('btnRodentExe').setAttribute('data-tip', nativeOk
-      ? (native ? 'Заново выбрать исполняемый файл Rodent IV и перезапустить процесс'
-        : 'Выбрать исполняемый файл Rodent IV и запустить его отдельным процессом')
+      ? (native ? 'Заново выбрать исполняемый файл Rodent (IV или V) и перезапустить процесс'
+        : 'Выбрать исполняемый файл Rodent V или IV и запустить его отдельным процессом')
       : 'Доступно только в десктоп-версии (Electron/Tauri): в браузере добавьте WASM-сборку');
     $('rodentHelp').innerHTML = RODENT_HELP;
   }
@@ -734,12 +799,14 @@
      но ссылки открывает системным браузером через слой платформы */
   var RODENT_URLS = {
     site: 'http://www.pkoziol.cal24.pl/rodent/download.htm',
-    repo: 'https://github.com/nescitus/rodent-iv'
+    repo: 'https://github.com/nescitus/rodent-iv',
+    vrepo: 'https://github.com/nescitus/Rodent-V',
+    vrel: 'https://github.com/nescitus/Rodent-V/releases'
   };
   function openRodentUrl(kind) {
     var url = RODENT_URLS[kind];
     if (!url) return;
-    addLog('Открываю страницу Rodent IV: ' + esc(url), 'arch');
+    addLog('Открываю страницу Rodent: ' + esc(url), 'arch');
     P.openExternal(url).then(function (res) {
       if (!res || !res.ok) toast('БРАУЗЕР НЕ ОТКРЫЛСЯ', 'check', url);
     }).catch(function () { toast('БРАУЗЕР НЕ ОТКРЫЛСЯ', 'check', url); });
@@ -748,29 +815,48 @@
   var RODENT_HELP =
     '<b>Что уже сделано в приложении</b><br>' +
     'Каталог движков; установка файла в IndexedDB (вне архива партий); запуск исполняемого файла ' +
-    'отдельным процессом в десктоп-обёртке; запуск WASM-сборки в Web Worker (JS-обвязка потока вшита ' +
-    'в приложение); протокол UCI (uci / isready / ucinewgame / setoption / position fen / go / stop); ' +
-    'чтение настоящих опций движка из рукопожатия uciok; подписка на info и bestmove; перевод хода из ' +
-    'нотации UCI (e2e4, e7e8q) в ход на доске; ограничение силы (время на ход, глубина, узлы) и пресеты ' +
-    '«Лёгкий / Средний / Сильный»; перезапуск движка при следующем открытии приложения.<br><br>' +
-    '<b>Вариант 1 — версия для компьютера (три действия, ничего программировать не нужно)</b><br>' +
-    '1. Скачайте Rodent IV: финальный пакет автора — FinalRodent.7z на pkoziol.cal24.pl/rodent/download.htm ' +
-    '(или исходники и сборки в репозитории github.com/nescitus/rodent-iv). Движок распространяется под GPL 3.0 ' +
-    'и в наше приложение не вложен: вы добавляете свою копию, она остаётся на вашем устройстве.<br>' +
-    '2. Распакуйте архив (нужен 7-Zip) и запомните папку: рядом с exe лежат каталоги personalities и books — ' +
-    'мы запускаем процесс с рабочей папкой движка, поэтому он найдёт свои файлы.<br>' +
-    '3. Здесь нажмите «🖥 Выбрать exe…» и укажите исполняемый файл. Приложение запустит его процессом, ' +
-    'спросит uci/isready, прочитает список опций и сделает Rodent IV активным движком.<br>' +
-    'Дальше компьютер играет им; путь запоминается, и при следующем запуске процесс поднимется сам. ' +
-    'Сила — пресетами внизу карточки движка, стиль — опцией Personality из настоящего списка опций движка.<br><br>' +
-    '<b>Вариант 2 — браузер и PWA</b><br>' +
-    'Здесь нужен Rodent IV, скомпилированный в WebAssembly (или asm.js): официально движок распространяется ' +
-    'только как исполняемый файл, готовой веб-сборки у автора нет. Если вы соберёте её сами (Emscripten, ' +
-    'WASI-stdio), перетащите файл в поле выше — обвязка потока уже вшита и ожидает от модуля экспорты ' +
-    'init() и commandLine() (или command()), а вывод движка перехватывает через fd_write.<br><br>' +
-    '<b>Итого от вас нужен только файл движка.</b> Если запуск не удался — раскройте «Журнал UCI» в карточке ' +
-    'движка: там видны все строки обмена. Чаще всего мешают антивирус (блокирует запуск exe), 32-битная ' +
-    'сборка без UCI или путь с кириллицей в старой сборке движка.';
+    'отдельным процессом в десктоп-обёртке (рабочая папка процесса — папка движка); запуск WASM-сборки ' +
+    'в Web Worker (JS-обвязка потока вшита в приложение); протокол UCI (uci / isready / ucinewgame / ' +
+    'setoption / position fen / go / stop); чтение настоящих опций движка из рукопожатия uciok — ' +
+    'приложение показывает, как движок представился (id name), поэтому Rodent V видно сразу; ' +
+    'подписка на info и bestmove; перевод хода из нотации UCI (e2e4, e7e8q) в ход на доске; ' +
+    'ограничение силы (время на ход, глубина, узлы) и пресеты «Лёгкий / Средний / Сильный»; ' +
+    'перезапуск движка при следующем открытии приложения.<br><br>' +
+    '<b>Вариант 1 — Rodent V (рекомендуем, версия для компьютера)</b><br>' +
+    '1. Откройте страницу релизов github.com/nescitus/Rodent-V/releases (кнопка «↗ Rodent V» ниже) ' +
+    'и скачайте архив release-1-2.zip (~46 МБ). Движок распространяется под GPL и в наше приложение ' +
+    'не вложен: вы добавляете свою копию, она остаётся на вашем устройстве.<br>' +
+    '2. <b>Распакуйте архив ЦЕЛИКОМ в одну папку</b> — это и есть ответ на вопрос «как вложить архив»: ' +
+    'в приложение указывается только один исполняемый файл, а остальные файлы архива движок читает сам ' +
+    'с диска. В папке должны остаться подпапки <code>personalities</code> (стили игры), <code>nets</code> ' +
+    '(нейросети NNUE) и <code>books</code> (дебютные книги) — пути к ним относительные, поэтому структура ' +
+    'папок важна. В самой папке несколько exe: берите <code>rodent_v_1.2.exe</code> (обычный); ' +
+    '<code>_Tal</code> — то же с более агрессивным стилем по умолчанию, <code>_testers</code> — вариант ' +
+    'для тестов с заблокированными опциями.<br>' +
+    '3. Здесь нажмите «🖥 Выбрать exe…» и укажите файл. Приложение запустит его процессом, спросит ' +
+    'uci/isready, прочитает имя («Rodent V 1.2 AVX2») и настоящие опции — Hash, Threads, MultiPV, ' +
+    'UCI_LimitStrength, UCI_Elo (800…3000), PersonalityFile — и сделает движок активным.<br>' +
+    'Стиль меняется опцией <b>PersonalityFile</b> (например, <code>personalities/tal_nnue.txt</code> — ' +
+    'файлы лежат в подпапке personalities, внутри них готовые наборы setoption). Сила — пресетами ' +
+    '«Лёгкий/Средний/Сильный» (ограничение времени на ход), а для точной настройки включите ' +
+    'UCI_LimitStrength и выставите UCI_Elo. Приложение запускает exe без аргументов — это обычный ' +
+    'режим движка; режимы <code>alloptions</code>/<code>nooptions</code> задаются аргументом командной ' +
+    'строки и из приложения не передаются.<br><br>' +
+    '<b>Вариант 2 — Rodent IV (версия для компьютера)</b><br>' +
+    'Финальный пакет автора — FinalRodent.7z на pkoziol.cal24.pl/rodent/download.htm (или репозиторий ' +
+    'github.com/nescitus/rodent-iv). Тоже распакуйте архив целиком: рядом с exe лежат каталоги ' +
+    'personalities и books — процесс запускается с рабочей папкой движка, поэтому он найдёт свои файлы. ' +
+    'Дальше — та же кнопка «🖥 Выбрать exe…». Стиль — опцией Personality из списка опций движка.<br><br>' +
+    '<b>Вариант 3 — браузер и PWA</b><br>' +
+    'Здесь нужен движок, скомпилированный в WebAssembly (или asm.js): официально ни Rodent IV, ни ' +
+    'Rodent V веб-сборок не имеют, а Rodent V (на Go) в браузер не перенесён. Если вы соберёте WASM ' +
+    'сами (Emscripten, WASI-stdio), перетащите ОДИН файл сборки в поле выше — архивы браузер не ' +
+    'принимает, обвязка потока уже вшита и ожидает от модуля экспорты init() и commandLine() ' +
+    '(или command()), а вывод движка перехватывает через fd_write.<br><br>' +
+    '<b>Итого: архив распаковывается на диск целиком, а в приложение вкладывается один файл — ' +
+    'исполняемый (десктоп) или .wasm (браузер).</b> Если запуск не удался — раскройте «Журнал UCI» ' +
+    'в карточке движка: там видны все строки обмена. Чаще всего мешают антивирус (блокирует запуск exe), ' +
+    'SmartScreen у свежего exe без подписи или перемещённая/переименованная папка personalities.';
 
   function platformNoteHTML() {
     var i = P.info();
@@ -786,6 +872,19 @@
   function onEngineFile(fileInput) {
     var f = fileInput.files && fileInput.files[0];
     if (!f) return;
+    /* архивы браузер не принимает: в IndexedDB нужен сам бинарник движка,
+       а распаковать архив страница не может. В десктопе архив распаковывают
+       на диск и указывают exe кнопкой «Выбрать exe…». */
+    if (/\.(zip|7z|rar|tar|gz)$/i.test(f.name)) {
+      $('rodentProgress').textContent = '';
+      toast('НУЖЕН САМ ФАЙЛ ДВИЖКА', 'check',
+        P.nativeEngineAvailable()
+          ? 'распакуйте архив в папку и нажмите «🖥 Выбрать exe…»'
+          : 'распакуйте архив и добавьте один файл .wasm или .js');
+      sfx('no');
+      fileInput.value = '';
+      return;
+    }
     $('rodentProgress').textContent = 'Читаем ' + f.name + ' (' + S.sizeLabel(f.size) + ')…';
     var rd = new FileReader();
     rd.onload = function () {
@@ -816,20 +915,32 @@
     if (!E.setActive('rodent4')) { toast('Движок недоступен', 'check', 'сначала добавьте файл сборки'); sfx('no'); return; }
     S.setSetting('engine', 'rodent4');
     E.newGame();
-    addLog('Активный движок: <b>Rodent IV</b>. Уровень силы задаётся пресетом UCI.', 'arch');
-    toast('RODENT IV АКТИВЕН', 'arch', 'параметры — в карточке движка');
+    addLog('Активный движок: <b>' + esc(rodentDisplayName()) + '</b>. Уровень силы задаётся пресетом UCI.', 'arch');
+    toast('RODENT АКТИВЕН', 'arch', 'параметры — в карточке движка');
     render();
     /* пробуем запустить: exe — процессом обёртки, WASM-сборку — в Web Worker */
     testEngine('rodent4');
+  }
+  /* имя для интерфейса: движок сам представляется при рукопожатии (id name),
+     а до рукопожатия показываем имя добавленного файла */
+  function rodentDisplayName() {
+    var id = E.engineIdentity('rodent4');
+    if (id && id.name) return id.name;
+    var info = E.installedInfo('rodent4');
+    if (info && info.name) return info.name;
+    return 'Rodent IV / V';
   }
   function testEngine(id) {
     if (!E.isInstalled(id)) { toast('Движок не установлен', 'check', ''); return; }
     pushEngineLog('--- проверка ' + id + (E.isNative(id) ? ' (процесс обёртки)' : ' (Web Worker)') + ' ---');
     E.start(id, { workerSource: G.workerSource }).then(function (r) {
       pushEngineLog('движок готов: ' + JSON.stringify(r));
+      var idn = E.engineIdentity(id);
+      if (idn && idn.name) pushEngineLog('движок представился: ' + idn.name + (idn.author ? ' · ' + idn.author : ''));
       var n = E.detectedOptions(id).length;
       if (n) pushEngineLog('опции движка получены: ' + E.detectedOptions(id).map(function (o) { return o.name; }).join(', '));
-      toast('ДВИЖОК ОТВЕЧАЕТ', 'arch', id + ' готов к работе' + (n ? ' · опций: ' + n : ''));
+      toast('ДВИЖОК ОТВЕЧАЕТ', 'arch',
+        (idn && idn.name ? idn.name : id) + ' готов к работе' + (n ? ' · опций: ' + n : ''));
       renderEngineTab();
       sfx('save');
     }).catch(function (err) {
@@ -860,7 +971,7 @@
   /* Перезапуск нативного движка при старте приложения: путь к exe сохранён в
      настройках, а сам процесс после закрытия окна, естественно, не живёт.
      Без этого компьютер после перезапуска молча играл бы встроенным ботом,
-     хотя в настройках выбран Rodent IV. */
+     хотя в настройках выбран внешний движок Rodent. */
   function restoreNativeEngine() {
     if (!P.nativeEngineAvailable()) return Promise.resolve(null);
     var st = S.settings();
@@ -871,15 +982,18 @@
       E.setActive('rodent4');
       E.newGame();
       pushEngineLog('движок восстановлен: ' + JSON.stringify(r));
-      addLog('<b>Rodent IV</b> запущен снова (' + esc(st.engineExe) + ') — компьютер играет им.', 'arch');
+      var idn = E.engineIdentity('rodent4');
+      addLog('<b>' + esc((idn && idn.name) || 'Внешний движок') + '</b> запущен снова (' +
+        esc(st.engineExe) + ') — компьютер играет им.', 'arch');
       renderEngineTab();
       return r;
     }).catch(function (err) {
       pushEngineLog('не удалось восстановить движок: ' + err.message);
-      addLog('Движок <b>Rodent IV</b> не запустился (' + esc(err.message) + ') — компьютер играет встроенным ботом.', 'check');
+      addLog('Внешний движок <b>Rodent</b> не запустился (' + esc(err.message) +
+        ') — компьютер играет встроенным ботом.', 'check');
       S.setSetting('engine', 'builtin');
       E.setActive('builtin');
-      toast('RODENT IV НЕ ЗАПУСТИЛСЯ', 'check', err.message);
+      toast('RODENT НЕ ЗАПУСТИЛСЯ', 'check', err.message);
       renderEngineTab();
       return null;
     });
@@ -1408,7 +1522,7 @@
           ' из ' + S.sizeLabel(q.limit) + ' (' + (typeof q.pct === 'number' ? q.pct : 0).toFixed(0) + '%).';
       ai.innerHTML = quotaLine + '<br>Всего данных в хранилище: ' + esc(S.usageLabel()) + '.' +
         '<br>Полные правила шахмат, игра за обе стороны, компьютер, архив партий в PGN, профили соперников, ' +
-        'стрелки разбора и место под внешние движки (Rodent IV). Один файл, работает без интернета.';
+        'стрелки разбора и место под внешние движки (Rodent IV / V). Один файл, работает без интернета.';
     }
   }
   /* живые данные окна настроек: журнал, движок, «О программе», галочки */
@@ -1555,7 +1669,7 @@
   }
 
   /* ============================ ЦВЕТОВАЯ ТЕМА (3.0) ============================
-     Категория «Цвета» в окне настроек: реестр из 72 элементов интерфейса и
+     Категория «Цвета» в окне настроек: реестр из 81 элемента интерфейса и
      доски (Theme.GROUPS), HSL-пипетка с палитрой, HEX-полем, прозрачностью и
      двухцветными градиентами, 7 готовых палитр, экспорт/импорт темы в JSON и
      точечная раскраска отдельных клеток (расширенный режим, по умолчанию
@@ -1727,7 +1841,7 @@
       '<div class="cp-row"><span class="cp-lab">Насыщенность (S)</span><input type="range" id="cpS" min="0" max="100" step="1" aria-label="Насыщенность"><span class="cp-num" id="cpSn"></span></div>' +
       '<div class="cp-row"><span class="cp-lab">Светлота (L)</span><input type="range" id="cpL" min="0" max="100" step="1" aria-label="Светлота"><span class="cp-num" id="cpLn"></span></div>' +
       '<div class="cp-row"><span class="cp-lab">Прозрачность (A)</span><input type="range" id="cpA" min="0" max="100" step="1" aria-label="Прозрачность"><span class="cp-num" id="cpAn"></span></div>' +
-      '<div class="cp-row"><span class="cp-lab">HEX-код</span><input class="inp cp-hex" id="cpHex" maxlength="9" spellcheck="false" aria-label="HEX-код"><span class="cp-target-hint" id="cpTarget"></span></div>' +
+      '<div class="cp-row hexrow"><span class="cp-lab">HEX-код</span><input class="inp cp-hex" id="cpHex" maxlength="9" spellcheck="false" aria-label="HEX-код"><span class="cp-target-hint" id="cpTarget"></span></div>' +
       (canGrad
         ? '<label class="chk"><input type="checkbox" id="cpGrad"> Двухцветный градиент</label>' +
           '<div id="cpGradBox" hidden>' +
@@ -1895,7 +2009,7 @@
 
   /* ---------- подсветка «что именно я крашу» ----------
      При открытии пипетки все элементы, которые красит эта переменная, на
-     полторы секунды обводятся золотом: список из 72 названий сам по себе
+     полторы секунды обводятся золотом: список из 81 названия сам по себе
      не отвечает на вопрос «где это видно?», а подсветка отвечает сразу. */
   var flashTimer = null, flashEls = [];
   function clearFlash() {
@@ -1910,9 +2024,29 @@
     if (target && target.sq !== undefined && target.sq !== null) {
       sels = ['#board .sq[data-sq="' + (parseInt(target.sq, 10) || 0) + '"]'];
     } else if (target && target.v) {
-      sels = T.selectorsFor(target.v);
-      /* переменные, которые app.js ставит инлайн-стилем, ищем по атрибуту */
-      if (!sels.length) sels = ['[style*="' + target.v + '"]'];
+      var mm = /^--mark-([1-4])$/.exec(target.v);
+      if (mm) {
+        /* стрелки и круги — внутри SVG: обводка там ненадёжна, поэтому золотом
+           подсвечиваются клетки, на которых стоят метки этого цвета */
+        var mi = parseInt(mm[1], 10) - 1, sqSeen = {};
+        (G.marks || []).forEach(function (m) {
+          if ((((m.color || 0) % 4) + 4) % 4 !== mi) return;
+          [m.from, m.to].forEach(function (s) {
+            if (s === undefined || s === null || sqSeen[s]) return;
+            sqSeen[s] = 1;
+          });
+        });
+        sels = Object.keys(sqSeen).map(function (s) { return '#board .sq[data-sq="' + s + '"]'; });
+      } else if (/^--pc-(w|b)-/.test(target.v)) {
+        /* цвет фигур живёт в спрайте (теневое дерево <use>) — подсвечиваем
+           сами отрисованные фигуры нужной стороны. (--pc-shadow не сюда:
+           он применяется CSS-фильтром и находится через selectorsFor.) */
+        sels = ['svg.' + (target.v.indexOf('--pc-w-') === 0 ? 'pw' : 'pb')];
+      } else {
+        sels = T.selectorsFor(target.v);
+        /* переменные, которые app.js ставит инлайн-стилем, ищем по атрибуту */
+        if (!sels.length) sels = ['[style*="' + target.v + '"]'];
+      }
     }
     var els = [];
     sels.forEach(function (sel) {
@@ -2104,7 +2238,7 @@
   }
 
   /* ============================ РЕЖИМ ДИЗАЙНЕРА (3.1) ============================
-     Список из 72 элементов — это точно, но непонятно: «Границы элементов»
+     Список из 81 элемента — это точно, но непонятно: «Границы элементов»
      ещё нужно найти глазами. В режиме дизайнера пользователь красит то, что
      видит: окно настроек закрывается, под курсором подсвечивается элемент,
      а клик открывает список цветов, которые этот элемент формируют, и
@@ -2120,6 +2254,9 @@
          именно перекрасить»);
        • левый Shift+клик — обычное действие элемента (переход по вкладке,
          кнопка): клик не перехватывается, рамка подсветки становится синей;
+       • правая кнопка проходит на доску: её удержание на одной клетке (≈0,5 с)
+         открывает окно цвета стрелок и меток — и в режиме дизайнера тоже
+         (метки при этом не рисуются, флаг noDraw в startMarkDrag);
        • Esc — выход в любом месте (если открыта пипетка, первый Esc закрывает
          её и откатывает цвет, второй — выводит из режима);
        • игровые хоткеи (F, M, N, стрелки) в режиме не работают, чтобы
@@ -2161,9 +2298,26 @@
          шаха, взятия) и её оформленных потомков (координаты, тень фигур). */
       var seen = {};
       seen[list[0].v || ('sq' + sq)] = 1;
+      /* цвета фигуры (3.2): заливка, контур и светлые детали — только если
+         фигура на клетке действительно есть */
+      var pcAt = cur().b[sq];
+      if (pcAt) {
+        var pcVars = C.colorOf(pcAt) === 'w'
+          ? ['--pc-w-fill', '--pc-w-line']
+          : ['--pc-b-fill', '--pc-b-line', '--pc-b-hi'];
+        pcVars.forEach(function (v) {
+          var it = T.BY_VAR[v];
+          if (!it || seen[v]) return;
+          seen[v] = 1;
+          list.push({
+            v: v, n: it.n, label: 'фигура на клетке', group: 'Фигуры',
+            g: false, rank: 0, order: 0
+          });
+        });
+      }
       var addFrom = function (node) {
         T.varsFor(node, 0).vars.forEach(function (x) {
-          if (list.length >= 9 || seen[x.v]) return;
+          if (list.length >= 12 || seen[x.v]) return;
           if (x.v === '--light' || x.v === '--dark') return;   /* цвет клетки уже первым пунктом */
           seen[x.v] = 1;
           list.push(x);
@@ -2258,11 +2412,12 @@
   }
 
   /* список «что именно перекрасить»: у кнопки это фон, фон при наведении,
-     граница и текст — четыре разные переменные темы */
+     граница и текст — четыре разные переменные темы.
+     res.title/res.text необязательны: их подставляет окно цвета меток (3.2). */
   function openDesignerChooser(res) {
     var t = themeStore();
-    var html = '<h2>🎨 Что перекрасить?</h2>' +
-      '<p>Этот элемент формируют несколько цветов темы. Выберите нужный — откроется пипетка.</p>' +
+    var html = '<h2>🎨 ' + esc(res.title || 'Что перекрасить?') + '</h2>' +
+      '<p>' + esc(res.text || 'Этот элемент формируют несколько цветов темы. Выберите нужный — откроется пипетка.') + '</p>' +
       '<div class="dpick">';
     res.vars.forEach(function (it, i) {
       var val = (it.sq !== undefined && it.sq !== null)
@@ -2289,6 +2444,46 @@
     });
     var cancel = box.querySelector('[data-a=cancel]');
     if (cancel) cancel.addEventListener('click', function () { closeModal(); });
+    return box;
+  }
+
+  /* ---------- окно цвета меток (3.2) ----------
+     Открывается удержанием правой кнопки мыши на одной клетке доски дольше
+     0.5 с: предлагает перекрасить то, что рисует правая кнопка, — круги и
+     стрелки разбора. Их четыре цвета чередуются по счёту меток; если на этой
+     клетке уже есть метка, её цвет предлагается первым. */
+  function openMarksChooser(sq) {
+    if (!T) return null;
+    var own = -1;
+    for (var i = 0; i < G.marks.length; i++) {
+      var x = G.marks[i];
+      if (x.from === sq || x.to === sq) { own = ((x.color || 0) % 4 + 4) % 4; break; }
+    }
+    var order = [0, 1, 2, 3];
+    if (own >= 0) order = [own].concat(order.filter(function (c) { return c !== own; }));
+    var vars = order.map(function (ci) {
+      var it = T.BY_VAR[MARK_VARS[ci]] || {};
+      return {
+        v: MARK_VARS[ci], n: it.n || MARK_VARS[ci], group: 'Доска и клетки',
+        label: ci === own
+          ? 'цвет метки на этой клетке'
+          : (ci === 0 ? 'следующая метка, если стёрто всё' : 'чередуется по счёту меток')
+      };
+    });
+    sfx('click');
+    var box = openDesignerChooser({
+      vars: vars,
+      title: 'Цвет стрелок и меток',
+      text: 'Правая кнопка рисует на доске круги и стрелки — их цвета чередуются по счёту. ' +
+        'Выберите, какой перекрасить: откроется та же пипетка, что и в настройках. ' +
+        'Это окно открывается удержанием правой кнопки на одной клетке (≈0,5 с).'
+    });
+    /* кнопку отпускают уже над окном: на Windows в этот момент стреляет
+       contextmenu — не отдаём его браузеру */
+    if (box && box.parentNode) {
+      box.parentNode.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+    }
+    return box;
   }
 
   /* сброс элемента под курсором: убираем его переопределения из темы */
@@ -2362,10 +2557,14 @@
     document.addEventListener('pointerover', function (e) { if (designerActive()) designerHover(e); }, true);
     document.addEventListener('pointerdown', function (e) {
       if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      /* правую кнопку пропускаем на доску: её удержание открывает окно цвета
+         меток и в режиме дизайнера (startMarkDrag ставит флаг noDraw) */
+      if (e.button === 2) return;
       e.stopPropagation();
     }, true);
     document.addEventListener('mousedown', function (e) {
       if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      if (e.button === 2) return;
       e.stopPropagation();
     }, true);
     document.addEventListener('click', function (e) { if (designerActive()) designerClick(e); }, true);
@@ -2431,6 +2630,7 @@
   }
 
   var CHANGELOG = [
+    ['3.2', 'Цвета фигур и стрелок, удержание правой кнопки, Rodent V. В теме появились две новые группы: «Фигуры» (заливка и контур белых, заливка, контур и светлые детали чёрных) и четыре цвета стрелок разбора в группе «Доска и клетки» — всего 81 настраиваемый элемент в шести группах. Фигуры перекрашиваются целиком: спрайт собирается с var(--pc-*), значения по умолчанию равны цветам Cburnett, поэтому классический вид не меняется. Цвет стрелок и кругов правой кнопки теперь тоже живёт в теме и применяется мгновенно. Новый способ добраться до цвета: удерживайте правую кнопку мыши на одной клетке доски дольше ~0,5 секунды (золотое кольцо покажет, что удержание засчитано) — откроется окно «Цвет стрелок и меток», где цвет метки на этой клетке предлагается первым; короткое нажатие и тяга к другой клетке работают как раньше (круг и стрелка), а уход курсора на другую клетку отменяет удержание. В режиме дизайнера клетка с фигурой предлагает и её цвета, а золотая подсветка переменной обводит сами фигуры или клетки с метками нужного цвета. Исправлено: HEX-поле в пипетке растягивалось на всю строку и вылезало за правый край окна (правило input.inp{width:100%} перебивало .cp-hex) — теперь поле фиксированной ширины, а подсказка рядом обрезается многоточием. Rodent V (2026, Go + NNUE, ~3400 CCRL Elo, GPL) проверен живым рукопожатием: приложение читает id name/id author и показывает, как движок представился, разбирает его настоящие опции (Hash, Clear Hash, UCI_Chess960, UCI_LimitStrength, UCI_Elo 800…3000, OwnBook, Threads, MultiPV, PersonalityFile) и водит протокол в прежнем порядке; пресеты силы работают командой go, поэтому подходят и IV, и V. Карточка движка переименована в «Rodent IV / V», добавлена кнопка «↗ Rodent V» на страницу релизов, справка переписана под оба поколения и объясняет, что архив распаковывается на диск целиком, а в приложение указывается один исполняемый файл (соседние папки personalities/nets/books движок читает сам — рабочая папка процесса равна папке exe; в обёртке Tauri рабочая папка теперь выставляется так же, как в Electron). Браузер больше не принимает архивы движка с внятным сообщением: нужен один файл .wasm/.js.'],
     ['3.1', 'Режим дизайнера: цвета теперь меняются кликом по самому интерфейсу. В настройках (⚙) → «Цвета» появилась кнопка «🖌 Режим дизайнера»: окно настроек закрывается, под курсором возникает рамка с названием цветов, которые формируют элемент, а клик открывает список «что именно перекрасить» и пипетку HSL. Карту «элемент → цвет» приложение строит разбором собственного CSS, поэтому она не разъезжается со стилями и покрывает все 72 элемента; при открытии пипетки все элементы, которые красит эта переменная, на полторы секунды обводятся золотом, а фон пипетки и окно настроек становятся полупрозрачными — изменение видно вживую, а не на затемнённом фоне; обычные действия (вкладки, кнопки, ходы) остаются доступны с зажатым левым Shift, выход — Esc в любом месте, а кнопка «↺ Сбросить элемент» убирает переопределения у элемента под курсором. Внизу окна настроек добавлена кнопка «⏻ Выход»: в версии для компьютера она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика), гасит процесс движка и сохраняет партию; в браузере кнопка скрыта. Rodent IV: JS-обвязка Web Worker вшита в единый файл, поэтому WASM-сборку можно добавить и без интернета; исполняемый файл в десктопе теперь считается установленным (кнопки «Использовать», «Проверить», «Удалить» работают), путь запоминается и движок сам поднимается при следующем открытии приложения; список опций читается из рукопожатия UCI — настоящие имена, типы, пределы, галочки, списки «личностей» и кнопки; команды протокола идут в правильном порядке (setoption → ucinewgame → position → go, причём ucinewgame посылается один раз на партию), а при сбое запуска приложение честно возвращается к встроенному боту и пишет причину в журнал UCI. Заодно исправлено: выбранный движок и путь к его файлу терялись при перезапуске (настройки собирались по белому списку ключей), а смена уровня «Лёгкий/Средний/Сильный» не доходила до внешнего движка — теперь уровень применяется как пресет UCI и не затирает настроенные вручную параметры. Справка дополнена разделами о цветах и выходе; подготовлен задел под настройку цвета фигур (переменные --pc-* и сборочный флаг PIECE_THEME — включим в 3.2 после проверки в браузере).'],
     ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
     ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
@@ -2443,7 +2643,7 @@
     ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
     ['2.4', 'Меню приложения «⋮» пересобрано в полноценное окно настроек с категориями: Вид, Архив, Движок, Журнал, Справка и О программе — переход кликом по категории или обычной прокруткой, ползунок окна стилизован под дизайн приложения. Вкладки «Журнал» и «Движок» переехали из бокового меню в настройки; «Перевернуть доску» осталось во вкладке «Ходы»; дубли кнопок (новая партия, вернуть ход, сохранение, выгрузка, стрелки, FEN/PGN, Lichess) убраны — они уже есть в основном меню. Подсказки кнопок переведены в один верхний слой с переносом текста: больше не появляются горизонтальные ползунки и описания не прячутся под вкладки. Напоминание о выгрузке архива можно отключить (настройки → «Архив»). Ошибка проверки обновлений больше не вываливает простыню HTTP-заголовков: короткое сообщение, полный текст — в раскрывающемся блоке «Технические подробности».'],
     ['3.0', 'Дизайнерское обновление: полная настройка цветов. В окне настроек (⚙) появилась категория «Цвета»: 72 элемента интерфейса и доски в пяти раскрывающихся группах — фон и панели, текст и акценты, кнопки и ползунки, доска (клетки, рамка, координаты, подсветки хода, шаха и взятия, тень фигур), а также подсказки, диалог превращения, кнопка Lichess, логотип, плашка просмотра истории и шкала квоты архива. У каждого элемента — HSL-пипетка с готовой палитрой из 36 образцов, HEX-полем, прозрачностью и двухцветными градиентами с настройкой угла; раздел доступен и с клавиатуры (Tab, Enter). Семь готовых палитр: Классика, Лёд, Изумруд, Сепия, Виолет, Багрянец, Графит. Точечная раскраска отдельных клеток a1…h8 с привязкой к полям доски — в расширенном режиме (по умолчанию выключен). Экспорт и импорт темы в JSON с отбрасыванием недопустимых значений, сброс отдельного элемента и всей темы; изменения применяются мгновенно с живым предпросмотром, «Отмена» и Esc возвращают прежний цвет. Обёртка Tauri доведена до собираемого состояния: Cargo.toml, build.rs, capabilities, мост window.Chesster, отдельная папка dist для фронтенда; оценка и план переноса — в TAURI.md.'],
-    ['план', 'Цвет шахматных фигур в теме (задел сделан: переменные --pc-* и флаг PIECE_THEME в build.js — включим после проверки в настоящем браузере); лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md).'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md); передача аргументов командной строки внешнему движку (режим alloptions у Rodent V).'],
   ];
   function showChangelog() { openSettings('help'); }
   function showAbout() { openSettings('about'); }
@@ -3028,13 +3228,13 @@
     '<li><b>Недостаточно материала</b> — мат невозможен в принципе.</li>' +
     '<li><b>По соглашению</b> — кнопка ½ под доской.</li>' +
     '<li><b>Сдача</b> — кнопка ⚑ под доской: поражение стороны, чей ход.</li></ul>' +
-    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
+    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Удерживайте правую кнопку на одной клетке дольше ~0,5 секунды</b> — откроется окно «Цвет стрелок и меток»: четыре чередующихся цвета настраиваются пипеткой, цвет метки на этой клетке предлагается первым (кольцо на клетке показывает, что удержание засчитано). <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
     '<h3>Архив партий</h3><p>После завершения партии предлагается сохранить её в архив: можно задать название и имена игроков. Сохранённую партию можно воспроизвести на доске, посмотреть её PGN, переименовать или удалить. Имена складываются в профили: сыграно, победы, ничьи, поражения, процент очков, маты, сдачи, личные встречи.</p>' +
     '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать партии без имени (анонимные) в статистике» в настройках (⚙ → «Архив») разрешает или запрещает такой учёт, а кнопка «Очистить анонима» на вкладке «Профили» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
     '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается в настройках (⚙ → «Архив»), там же напоминания можно отключить.</p>' +
     '<h3>Импорт PGN</h3><p>Кнопка «⬆ Импорт» принимает текст или файл с партиями. При импорте предлагается выбрать, учитывать ли эти партии в статистике профилей.</p>' +
-    '<h3>Цвета и режим дизайнера</h3><p>Настройки (⚙) → «Цвета»: 72 элемента интерфейса и доски в пяти группах, у каждого — пипетка HSL с палитрой, HEX-кодом, прозрачностью и градиентами. Если не знаете, как элемент называется, включите <b>«🖌 Режим дизайнера»</b>: окно настроек закроется, под курсором появится рамка с названием цветов, а клик откроет список «что именно перекрасить» и пипетку. Обычные действия элементов остаются доступны с зажатым <b>левым Shift</b>, выход — <span class="kbd">Esc</span> в любом месте. Кнопка «↺ Сбросить элемент» в плашке режима убирает переопределения у элемента под курсором.</p>' +
-    '<h3>Выход из приложения</h3><p>В версии для компьютера внизу окна настроек есть кнопка <b>«⏻ Выход»</b>: она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика). Партия, архив, статистика и тема сохраняются автоматически, а процесс внешнего движка (Rodent IV) завершается вместе с окном. В браузере кнопка скрыта: вкладку закрывают обычным способом (<span class="kbd">Ctrl+W</span>).</p>' +
+    '<h3>Цвета и режим дизайнера</h3><p>Настройки (⚙) → «Цвета»: 81 элемент интерфейса и доски в шести группах (включая цвета фигур и четыре цвета стрелок разбора), у каждого — пипетка HSL с палитрой, HEX-кодом, прозрачностью и градиентами. Если не знаете, как элемент называется, включите <b>«🖌 Режим дизайнера»</b>: окно настроек закроется, под курсором появится рамка с названием цветов, а клик откроет список «что именно перекрасить» и пипетку. Обычные действия элементов остаются доступны с зажатым <b>левым Shift</b>, выход — <span class="kbd">Esc</span> в любом месте. Кнопка «↺ Сбросить элемент» в плашке режима убирает переопределения у элемента под курсором.</p>' +
+    '<h3>Выход из приложения</h3><p>В версии для компьютера внизу окна настроек есть кнопка <b>«⏻ Выход»</b>: она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика). Партия, архив, статистика и тема сохраняются автоматически, а процесс внешнего движка (Rodent) завершается вместе с окном. В браузере кнопка скрыта: вкладку закрывают обычным способом (<span class="kbd">Ctrl+W</span>).</p>' +
     '<h3>Горячие клавиши</h3><p><span class="kbd">←</span> <span class="kbd">→</span> — разбор ходов, <span class="kbd">↑</span> <span class="kbd">↓</span> — в начало/конец, <span class="kbd">F</span> — перевернуть доску, <span class="kbd">Z</span> — вернуть ход, <span class="kbd">N</span> — новая партия, <span class="kbd">M</span> — боковое меню, <span class="kbd">F11</span> — полный экран, <span class="kbd">Esc</span> — снять выделение, закрыть окно или выйти из режима дизайнера.</p>' +
     '<h3>Правила полностью</h3><p>Рокировка (включая запрет при шахе и через битое поле), взятие на проходе, превращение пешки с выбором фигуры, запрет ходов, оставляющих своего короля под шахом. Движок сверен с эталонным perft до 5-й глубины.</p>';
 
@@ -3658,7 +3858,7 @@
     $('rodentFile').onchange = function () { onEngineFile($('rodentFile')); };
     $('btnRodentExe').onclick = function () {
       if (!P.nativeEngineAvailable()) {
-        toast('ТОЛЬКО В ДЕСКТОП-ВЕРСИИ', 'info', 'в браузере Rodent IV подключается своей WASM-сборкой через поле выше');
+        toast('ТОЛЬКО В ДЕСКТОП-ВЕРСИИ', 'info', 'в браузере движок подключается своей WASM-сборкой через поле выше');
         return;
       }
       P.pickEngineFile().then(function (res) {
@@ -3668,11 +3868,13 @@
           pushEngineLog('движок запущен: ' + JSON.stringify(r));
           S.setSettings({ engine: 'rodent4', engineExe: res.path });
           E.newGame();
+          var idn = E.engineIdentity('rodent4');
+          var nm = (idn && idn.name) ? idn.name : 'Rodent';
           var n = E.detectedOptions('rodent4').length;
           if (n) pushEngineLog('опции движка получены: ' + E.detectedOptions('rodent4').map(function (o) { return o.name; }).join(', '));
-          addLog('<b>Rodent IV запущен как процесс</b> (' + esc(res.path) + ')' +
+          addLog('<b>' + esc(nm) + ' запущен как процесс</b> (' + esc(res.path) + ')' +
             (n ? ' — движок объявил опций: ' + n : '') + '.', 'arch');
-          toast('RODENT IV ЗАПУЩЕН', 'arch', n ? 'нативный процесс · опций получено: ' + n : 'нативный процесс, UCI-поток подключён');
+          toast(nm.toUpperCase() + ' ЗАПУЩЕН', 'arch', n ? 'нативный процесс · опций получено: ' + n : 'нативный процесс, UCI-поток подключён');
           sfx('save');
           render();
         });
@@ -3685,6 +3887,8 @@
     };
     $('btnRodentSite').onclick = function () { openRodentUrl('site'); };
     $('btnRodentRepo').onclick = function () { openRodentUrl('repo'); };
+    var bv = $('btnRodentV');
+    if (bv) bv.onclick = function () { openRodentUrl('vrel'); };
     $('btnRodentUse').onclick = useRodent;
     $('btnRodentTest').onclick = function () { testEngine('rodent4'); };
     $('btnRodentDel').onclick = function () { deleteEngine('rodent4'); };
@@ -3907,6 +4111,9 @@
     importTheme: importTheme, themeStore: themeStore, flashThemeTargets: flashThemeTargets,
     /* режим дизайнера (3.1): красим интерфейс кликом по нему */
     startDesigner: startDesigner, stopDesigner: stopDesigner, designerActive: designerActive,
+    /* цвет меток и удержание правой кнопки (3.2) */
+    openMarksChooser: openMarksChooser, markStyle: markStyle, MARK_VARS: MARK_VARS,
+    MARK_HOLD_MS: MARK_HOLD_MS, rodentDisplayName: rodentDisplayName,
     restoreEngineChoice: restoreEngineChoice, RODENT_URLS: RODENT_URLS,
     designerFor: designerFor, resetDesignerElement: resetDesignerElement, quitApp: quitApp,
     restoreNativeEngine: restoreNativeEngine,

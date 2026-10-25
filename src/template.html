@@ -336,29 +336,32 @@
         <div class="engine-list" id="engineList"></div>
         <div class="engine-detail" id="engineDetail"></div>
 
-        <div class="lbl" style="margin-top:14px">Rodent IV</div>
+        <div class="lbl" style="margin-top:14px">Rodent IV / Rodent V</div>
         <div class="arch-info" id="rodentInfo"></div>
         <div class="engine-drop" id="rodentDrop">
           <div class="ed-ic">🧩</div>
           <div class="ed-txt">
-            Добавьте свою сборку Rodent IV для браузера (WASM/asm.js с UCI-интерфейсом).
-            Файл сохранится локально в этом устройстве — в IndexedDB, отдельно от архива партий.
+            Браузер: добавьте свою сборку движка в WebAssembly/asm.js с UCI-интерфейсом —
+            один файл .wasm или .js (архив распакуйте заранее). Файл сохранится локально
+            в этом устройстве — в IndexedDB, отдельно от архива партий.
+            В версии для компьютера архивы не нужны: распакуйте их в папку и нажмите «🖥 Выбрать exe…».
           </div>
-          <input type="file" id="rodentFile" accept=".wasm,.js,.zip,application/wasm,application/javascript" aria-label="Файл движка Rodent IV">
+          <input type="file" id="rodentFile" accept=".wasm,.js,application/wasm,application/javascript" aria-label="Файл движка Rodent (WASM/asm.js)">
           <div class="hint" id="rodentProgress"></div>
         </div>
         <div class="btns3" style="margin-top:8px">
-          <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
-          <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent IV активным движком компьютера">▶ Использовать</button>
+          <button class="btn btn-mini" id="btnRodentExe" data-tip="Десктоп: выбрать исполняемый файл Rodent V или IV и запустить его отдельным процессом">🖥 Выбрать exe…</button>
+          <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent активным движком компьютера">▶ Использовать</button>
           <button class="btn btn-mini" id="btnRodentTest" data-tip="Запустить движок и проверить, что он отвечает на UCI">🔌 Проверить</button>
           <button class="btn btn-mini danger" id="btnRodentDel" data-tip="Удалить файл движка из хранилища">🗑 Удалить</button>
         </div>
         <div class="set-actions" style="margin-top:10px">
-          <button class="btn btn-mini" id="btnRodentSite" data-tip="Открыть страницу загрузки Rodent IV (сайт автора, пакет FinalRodent.7z)">↗ Страница загрузки</button>
-          <button class="btn btn-mini" id="btnRodentRepo" data-tip="Открыть репозиторий Rodent IV на GitHub: исходники, exe и сборки для macOS">↗ Репозиторий GitHub</button>
+          <button class="btn btn-mini" id="btnRodentV" data-tip="Открыть релизы Rodent V на GitHub: архив release-1-2.zip с exe, нейросетями, книгами и «личностями»">↗ Rodent V (релизы)</button>
+          <button class="btn btn-mini" id="btnRodentSite" data-tip="Открыть страницу загрузки Rodent IV (сайт автора, пакет FinalRodent.7z)">↗ Страница загрузки IV</button>
+          <button class="btn btn-mini" id="btnRodentRepo" data-tip="Открыть репозиторий Rodent IV на GitHub: исходники, exe и сборки для macOS">↗ Репозиторий IV</button>
         </div>
         <details class="quota-help" style="margin-top:2px" open>
-          <summary>Что нужно, чтобы Rodent IV заработал здесь</summary>
+          <summary>Что нужно, чтобы Rodent заработал здесь</summary>
           <div class="hint" id="rodentHelp"></div>
         </details>
       </section>
@@ -412,7 +415,7 @@
 <div id="designerHl" aria-hidden="true"><span id="designerHlTag"></span></div>
 <div class="dhud" id="designerHud" role="status" aria-live="polite" hidden>
   <span class="dhud-ic" aria-hidden="true">🖌</span>
-  <span class="dhud-txt"><b>Режим дизайнера</b>клик — выбрать цвет элемента · левый Shift+клик — обычное действие · Esc — выход</span>
+  <span class="dhud-txt"><b>Режим дизайнера</b>клик — выбрать цвет элемента · левый Shift+клик — обычное действие · удержание правой кнопки на клетке доски (~0,5 с) — цвет стрелок и меток · Esc — выход</span>
   <span class="dhud-el" id="designerTarget">наведите курсор на элемент</span>
   <span class="dhud-btns">
     <button class="btn btn-mini" id="btnDesignerUndo" data-tip="Вернуть наведённому элементу цвета по умолчанию">↺ Сбросить элемент</button>

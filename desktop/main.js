@@ -254,7 +254,7 @@ ipcMain.on('engine:kill', () => {
 ipcMain.handle('engine:pick', async () => {
   if (!win) return { canceled: true };
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: 'Выбрать исполняемый файл движка (Rodent IV)',
+    title: 'Выбрать исполняемый файл движка (Rodent V или IV)',
     properties: ['openFile'],
     filters: [
       { name: 'Исполняемые файлы', extensions: ['exe', 'bin', ''] },

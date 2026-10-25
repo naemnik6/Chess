@@ -19,34 +19,49 @@ function pieceSprite() {
   return out + '</svg>';
 }
 
-/* ---------- задел под настройку цвета фигур (план 3.2) ----------
+/* ---------- настройка цвета фигур (3.2) ----------
    Фигуры рисуются через <use href="#pc-wK">, а обычные CSS-селекторы внутрь
-   теневого дерева <use> не проникают. Единственный рабочий способ перекрасить
-   их — подставить var() прямо в спрайт: custom properties наследуются в <use>,
-   поэтому значение можно менять из темы (и даже для каждой доски отдельно).
-   Флаг намеренно выключен: подстановку нужно проверить в настоящем браузере
-   (в песочнице и jsdom фигуры не рисуются), иначе есть риск получить чёрные
-   белые фигуры. Переменные --pc-* уже объявлены в :root и равны текущим
-   цветам спрайта, поэтому включение флага вид не изменит. */
-const PIECE_THEME = false;
-const PIECE_VARS = {
-  w: { fill: '--pc-w-fill', line: '--pc-w-line', hi: '--pc-w-fill' },
-  b: { fill: '--pc-b-fill', line: '--pc-b-line', hi: '--pc-b-hi' }
+   теневого дерева <use> не проникают. Рабочий способ перекрасить их —
+   подставить var() прямо в спрайт: custom properties наследуются в <use>,
+   поэтому значение можно менять из темы. Явные fill/stroke заменяются здесь,
+   а неявная заливка (у чёрных ферзя, ладьи и пешки fill не задан — он
+   наследуется) приходит от самого <use>: app.js ставит ему
+   style="fill:var(--pc-b-fill,#000)". Переменные --pc-* объявлены в :root и
+   в реестре темы, значения по умолчанию равны цветам спрайта Cburnett,
+   поэтому включение флага классический вид не меняет. */
+const PIECE_THEME = true;
+/* карта «атрибут:цвет → переменная» раздельно для fill и stroke:
+   у белых фигур #000 — это контур и тёмные детали (грива коня),
+   у чёрных #000 в fill — тело, а #000 в stroke — контур; #ececec — светлые детали. */
+const PIECE_MAP = {
+  w: {
+    'fill:#fff': '--pc-w-fill', 'fill:#ffffff': '--pc-w-fill',
+    'stroke:#000': '--pc-w-line', 'stroke:#000000': '--pc-w-line',
+    'fill:#000': '--pc-w-line', 'fill:#000000': '--pc-w-line'
+  },
+  b: {
+    'fill:#000': '--pc-b-fill', 'fill:#000000': '--pc-b-fill',
+    'stroke:#000': '--pc-b-line', 'stroke:#000000': '--pc-b-line',
+    'fill:#ececec': '--pc-b-hi', 'stroke:#ececec': '--pc-b-hi'
+  }
 };
 function themeablePiece(inner, color) {
   if (!PIECE_THEME) return inner;
-  const v = PIECE_VARS[color] || PIECE_VARS.w;
-  const map = { '#fff': v.fill, '#ffffff': v.fill, '#000': color === 'w' ? v.line : v.fill, '#000000': color === 'w' ? v.line : v.fill, '#ececec': v.hi };
+  const map = PIECE_MAP[color] || PIECE_MAP.w;
   return inner.replace(/<(path|g|circle|rect|ellipse|polygon)([^>]*)>/g, (m0, tag, attrs) => {
     const styles = [];
     const rest = attrs.replace(/(fill|stroke)="(#[0-9a-fA-F]{3,6})"/g, (mm, kind, hex) => {
-      const vr = map[hex.toLowerCase()];
+      const vr = map[kind + ':' + hex.toLowerCase()];
       if (!vr) return mm;
       styles.push(`${kind}:var(${vr},${hex})`);
       return '';
     });
     if (!styles.length) return m0;
-    return `<${tag}${rest.replace(/\s{2,}/g, ' ')} style="${styles.join(';')}">`;
+    /* тег может быть само закрывающимся (<path … />): «/» попадает в attrs,
+       его нужно вернуть после добавленного style, а не внутрь списка атрибутов */
+    const selfClose = /\s*\/\s*$/.test(rest);
+    const clean = rest.replace(/\s*\/\s*$/, '').replace(/\s{2,}/g, ' ');
+    return `<${tag}${clean} style="${styles.join(';')}"${selfClose ? '/>' : '>'}`;
   });
 }
 
