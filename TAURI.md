@@ -44,12 +44,12 @@
   (`initialization_script`), повторяет форму ответов Electron:
   `saveFile`, `openExternal`, `pickEngine`, `spawnEngine`, `engineWrite`,
   `engineKill`, `onEngineLine/Exit/Error`, `setFullscreen`, `isFullscreen`,
-  `setTitle`, `onMenu`, `appReady`. `src/platform.js` определит среду как
+  `setTitle`, `onMenu`, `appReady`, `quitApp`. `src/platform.js` определит среду как
   `tauri` без единой строчки хардкода — слой платформ это уже умеет.
 - **`src/main.rs`** — Rust-команды: нативное сохранение файла через диалог,
   открытие внешних ссылок, выбор и запуск UCI-движка отдельным процессом
   (под Windows — без консольного окна, `CREATE_NO_WINDOW`), трансляция строк
-  движка в WebView событиями `engine:line`.
+  движка в WebView событиями `engine:line` и выход из приложения (`quit_app`).
 - **`dist/` — отдельная папка фронтенда.** `frontendDist` указывает на
   `desktop/tauri/dist`, а не на корень проекта: иначе в бинарник попал бы
   весь репозиторий вместе с `desktop/node_modules` (сотни мегабайт
@@ -87,6 +87,10 @@
   данные к UTF-8 (`toText`).
 - **Движок глушится при выходе** (`RunEvent::Exit`) и перед новым запуском —
   как в Electron, чтобы не оставлять висящих процессов Rodent IV.
+- **Кнопка «⏻ Выход» работает и здесь** (3.1): команда `quit_app` гасит движок
+  и вызывает `app.exit(0)`. В полноэкранном режиме у окна Tauri нет ни заголовка,
+  ни крестика, поэтому без этой команды выйти из приложения было нечем.
+  Разрешений в `capabilities/` команда не требует — это собственный код Rust.
 - **Ссылки открываются через `rundll32 url.dll,FileProtocolHandler`,** а не
   `cmd /C start`: оболочка разбила бы адрес Lichess по символу `&`, а заодно
   исчезает риск инъекции в командную строку. Дополнительно адрес

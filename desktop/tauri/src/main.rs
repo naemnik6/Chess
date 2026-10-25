@@ -174,6 +174,18 @@ fn engine_kill(state: State<EngineState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Выход из приложения — кнопка «⏻ Выход» в окне настроек (3.1).
+/// В полноэкранном режиме у окна нет ни заголовка, ни крестика, поэтому
+/// закрыть приложение из интерфейса было нечем. Движок гасим явно, затем
+/// app.exit(0) закрывает окна и завершает процесс (RunEvent::Exit ниже
+/// подстраховывает: если процесс движка ещё жив, он будет убит и там).
+#[tauri::command(async)]
+fn quit_app(app: AppHandle, state: State<EngineState>) -> Result<(), String> {
+    kill_engine(&state);
+    app.exit(0);
+    Ok(())
+}
+
 fn main() {
     /* Мост window.Chesster внедряется до загрузки страницы: platform.js
        сразу видит обёртку (как preload.js в Electron). Версия подставляется
@@ -184,7 +196,7 @@ fn main() {
         .initialization_script(&bridge)
         .manage(EngineState::default())
         .invoke_handler(tauri::generate_handler![
-            save_file, open_external, pick_engine, engine_spawn, engine_write, engine_kill
+            save_file, open_external, pick_engine, engine_spawn, engine_write, engine_kill, quit_app
         ])
         .build(tauri::generate_context!())
         .expect("ошибка запуска Chesster (Tauri)");

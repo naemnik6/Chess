@@ -61,6 +61,11 @@
     flipped: false, autoFlip: false,
     meWhite: '', meBlack: '',
     countAnon: true, archiveReminder: 30, archiveReminderOn: true, activeTab: 'moves',
+    /* чем считает компьютер: 'builtin' или id внешнего движка (rodent4), а для
+       нативного движка — ещё и путь к исполняемому файлу, чтобы перезапустить
+       его при следующем открытии приложения. Без записи в DEFAULT_SETTINGS эти
+       ключи терялись при перезагрузке (список настроек собирается по нему). */
+    engine: 'builtin', engineExe: null,
     /* цветовая тема (3.0): переопределения CSS-переменных, точечные цвета
        клеток (ключи "0".."63") и флаг расширенного режима раскраски */
     theme: {}, sqColors: {}, themeAdv: false

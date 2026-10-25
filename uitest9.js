@@ -91,7 +91,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     'меню «⋮» и кнопка «?» убраны — их заменило окно настроек');
   doc.getElementById('btnSettings').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   ok(App.settingsOpen(), 'настройки открываются кликом по ⚙');
-  const cats = [...doc.querySelectorAll('#setNav button')].map(b => b.dataset.sc);
+  /* кнопка «Выход» в боковине не категория: у неё нет data-sc (3.1) */
+  const cats = [...doc.querySelectorAll('#setNav button[data-sc]')].map(b => b.dataset.sc);
   ok(cats.join(',') === 'view,colors,archive,engine,events,help,about', 'семь категорий: ' + cats.join(' / '));
   ok([...doc.querySelectorAll('#setScroll section[data-set]')].map(x => x.dataset.set).join(',') === cats.join(','),
     'каждой категории соответствует раздел окна');

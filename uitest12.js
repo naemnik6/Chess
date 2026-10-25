@@ -67,7 +67,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(!App.settingsOpen(), 'Escape закрывает настройки');
 
   console.log('\n— 2.4: категории —');
-  const cats = qa('#setNav button').map(x => x.dataset.sc);
+  /* кнопка «Выход» внизу боковины не категория: считаем только data-sc (3.1) */
+  const cats = qa('#setNav button[data-sc]').map(x => x.dataset.sc);
   ok(cats.join(',') === 'view,colors,archive,engine,events,help,about', 'семь категорий: ' + cats.join(', '));
   ok(qa('#setScroll section[data-set]').map(x => x.dataset.set).join(',') === cats.join(','),
     'каждой категории соответствует раздел');
@@ -198,7 +199,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/git commit -m "Release /.test(bat) && bat.indexOf('git tag v' + PV) >= 0, 'bat: английский коммит Release и тег v' + PV);
   ok(!/[^\x09\x0a\x0d\x20-\x7e]/.test(bat), 'bat: только ASCII — текст в GitHub останется читаемым');
   ok(App.CHANGELOG.some(r => r[0] === '2.4' && /окно настроек/i.test(r[1])), 'в журнале изменений есть запись 2.4 про окно настроек');
-  ok(qa('#tabs button').length === 5 && qa('#setNav button').length === 7, 'итог: 5 вкладок + 7 категорий настроек');
+  ok(qa('#tabs button').length === 5 && qa('#setNav button[data-sc]').length === 7, 'итог: 5 вкладок + 7 категорий настроек');
 
   console.log('\n============================');
   console.log(V + ' (uitest12): пройдено ' + pass + ', провалено ' + fail);

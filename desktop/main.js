@@ -264,6 +264,23 @@ ipcMain.handle('engine:pick', async () => {
   return { canceled, path: canceled ? null : filePaths[0] };
 });
 
+/* ---------- выход из приложения ----------
+   Кнопка «⏻ Выход» в окне настроек (3.1): в полноэкранном режиме у окна нет
+   ни заголовка, ни крестика, поэтому закрыть приложение из интерфейса было
+   нечем. Гасим процесс внешнего движка, закрываем окно и завершаем Electron —
+   страница не должна оставлять приложение висящим в памяти. */
+ipcMain.handle('app:quit', async () => {
+  if (engineChild) { try { engineChild.kill(); } catch (e) { } engineChild = null; }
+  try {
+    if (win && !win.isDestroyed()) {
+      if (win.isFullScreen()) win.setFullScreen(false);
+      win.close();
+    }
+  } catch (e) { /* окно уже закрывается */ }
+  app.quit();
+  return { ok: true };
+});
+
 /* ---------- обновления (electron-updater + GitHub Releases) ----------
    Источник обновлений: репозиторий GitHub naemnik6/Chess — артефакты релиза
    (exe-установщик + latest.yml) публикует GitHub Actions.

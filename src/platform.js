@@ -311,6 +311,21 @@
   }
 
   /* ---------- жизненный цикл приложения ---------- */
+  /* Выход из приложения: в обёртке закрываем окно и гасим процесс движка,
+     в браузере вкладку закрыть из страницы нельзя (браузеры запрещают
+     window.close для не своих окон) — честно возвращаем ok:false. */
+  function closeSelf() {
+    try { if (win) win.close(); } catch (e) { /* окно закрыто не будет */ }
+    return Promise.resolve({ ok: false, how: 'browser' });
+  }
+  function quit() {
+    var b = bridge();
+    if (!b || typeof b.quitApp !== 'function') return closeSelf();
+    return callBridge('quitApp', {}).then(function (res) {
+      if (res && res.ok === false) return closeSelf();
+      return { ok: true, how: 'native' };
+    }).catch(function () { return closeSelf(); });
+  }
   function onQuitRequested(handler) {
     if (win) win.addEventListener('before-quit', handler);
   }
@@ -338,6 +353,7 @@
     putFile: putFile, getFile: getFile, delFile: delFile,
     storageEstimate: storageEstimate, requestPersistent: requestPersistent,
     onQuitRequested: onQuitRequested, onAppEvent: onAppEvent, onMenu: onMenu,
+    quit: quit,
     setFullscreen: setFullscreen, isFullscreen: isFullscreen, onFullscreenChange: onFullscreenChange,
     nativeEngineAvailable: nativeEngineAvailable, pickEngineFile: pickEngineFile,
     spawnEngine: spawnEngine, engineWrite: engineWrite, engineKill: engineKill,

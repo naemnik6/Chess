@@ -34,7 +34,12 @@
     thinking: false, gen: 0,
     tab: 'moves',
     openEngine: null,     /* раскрытая карточка движка */
-    workerSource: null,   /* JS-обвязка потока для внешнего движка */
+    /* JS-обвязка потока для внешнего UCI-движка (Rodent IV в WASM): сборщик
+       заменяет весь этот строковый литерал на текст desktop/rodent4-worker.js,
+       поэтому приложение остаётся одним файлом и запускает движок без интернета */
+    workerSource: '/*@ENGINEWORKER@*/',
+    designer: false,        /* режим дизайнера: красим интерфейс кликом (3.1) */
+    designerTarget: null,   /* элемент под курсором и его переменные темы */
     savedId: null,          /* id записи в архиве, если текущая партия сохранена */
     playback: null,         /* просмотр партии из архива */
     live: null,             /* снимок живой партии на время просмотра */
@@ -589,26 +594,47 @@
     /* блок Rodent IV */
     var r = E.byId('rodent4');
     var installed = E.isInstalled('rodent4');
+    var info = E.installedInfo('rodent4');
+    var native = installed && E.isNative('rodent4');
+    var detN = E.detectedOptions('rodent4').length;
     $('rodentInfo').innerHTML = installed
-      ? ('Установлен: <b>' + esc(E.installedInfo('rodent4').name) + '</b> · ' +
-         S.sizeLabel(E.installedInfo('rodent4').size) + ' · добавлен ' +
-         esc(E.installedInfo('rodent4').added.slice(0, 16).replace('T', ' ')) +
-         '<br>Хранится в ' + esc(E.installedInfo('rodent4').storage) + ' — место архива партий не расходуется.' +
-         (st.active === 'rodent4' ? '<br><b>Сейчас компьютер играет этим движком.</b>' : ''))
-      : ('Не установлен. Место подготовлено: каталог движков, UCI-транспорт в Web Worker, ' +
-         'настройка силы через DepthLimit/NodeLimit/MoveTime/MultiPV и пресеты под уровни «Лёгкий/Средний/Сильный». ' +
-         'Осталось добавить саму сборку.');
+      ? (native
+        ? ('Подключён исполняемый файл: <b>' + esc(info.name) + '</b> · добавлен ' +
+           esc(String(info.added).slice(0, 16).replace('T', ' ')) + '<br>Путь: <code>' + esc(info.path || '') + '</code>' +
+           ' — запускается отдельным процессом обёртки, в хранилище браузера не копируется.' +
+           (st.native ? '<br><b>Процесс запущен, UCI-поток подключён.</b>' : '<br>Процесс не запущен — нажмите «Проверить».') +
+           (detN ? '<br>Движок объявил опций: <b>' + detN + '</b> (видны в карточке движка).' : ''))
+        : ('Установлен: <b>' + esc(info.name) + '</b> · ' +
+           S.sizeLabel(info.size) + ' · добавлен ' +
+           esc(String(info.added).slice(0, 16).replace('T', ' ')) +
+           '<br>Хранится в ' + esc(info.storage) + ' — место архива партий не расходуется.' +
+           (detN ? '<br>Движок объявил опций: <b>' + detN + '</b>.' : ''))) +
+        ((st.active === 'rodent4' && !native) ? '<br><b>Сейчас компьютер играет этим движком.</b>' : '') +
+        ((st.active === 'rodent4' && native && st.native) ? '<br><b>Сейчас компьютер играет этим движком.</b>' : '')
+      : ('Не установлен. Место подготовлено: каталог движков, UCI-транспорт (Web Worker для WASM-сборки ' +
+         'и отдельный процесс для exe), разбор настоящих опций движка, настройка силы через ' +
+         'MoveTime/DepthLimit/NodeLimit и пресеты «Лёгкий/Средний/Сильный». Осталось добавить саму сборку: ' +
+         'в десктопе — исполняемый файл, в браузере — WASM.');
     $('btnRodentUse').disabled = !installed;
     $('btnRodentTest').disabled = !installed;
     $('btnRodentDel').disabled = !installed;
     var nativeOk = P.nativeEngineAvailable();
     $('btnRodentExe').disabled = !nativeOk;
+    $('btnRodentExe').innerHTML = native ? '\u{1F5A5} Перезапустить exe…' : '\u{1F5A5} Выбрать exe…';
     $('btnRodentExe').setAttribute('data-tip', nativeOk
-      ? 'Выбрать исполняемый файл Rodent IV и запустить его отдельным процессом'
+      ? (native ? 'Заново выбрать исполняемый файл Rodent IV и перезапустить процесс'
+        : 'Выбрать исполняемый файл Rodent IV и запустить его отдельным процессом')
       : 'Доступно только в десктоп-версии (Electron/Tauri): в браузере добавьте WASM-сборку');
     $('rodentHelp').innerHTML = RODENT_HELP;
   }
 
+  /* Наши параметры поиска (MoveTime/DepthLimit/NodeLimit) идут в команду go,
+     а не в setoption: их знает приложение, а не движок, поэтому они показаны
+     отдельным блоком и остаются доступными всегда. */
+  var GO_OPTS = ['MoveTime', 'DepthLimit', 'NodeLimit'];
+  var GO_RU = {
+    MoveTime: 'Время на ход, мс', DepthLimit: 'Ограничение глубины', NodeLimit: 'Ограничение по узлам'
+  };
   function renderEngineOptions(d) {
     if (d.kind !== 'uci') {
       return '<div class="lbl" style="margin-top:11px">Уровень</div>' +
@@ -619,18 +645,56 @@
         }).join('') + '</select>';
     }
     var o = E.getOptions(d.id);
-    var html = '<div class="lbl" style="margin-top:11px">Параметры UCI</div>';
-    d.uciOptions.forEach(function (op) {
-      var v = o[op.name] !== undefined ? o[op.name] : '';
-      html += '<div class="opt-row"><label for="opt_' + op.name + '">' + esc(op.label) +
-        ' <span style="color:var(--muted2)">(' + op.name + ')</span></label>' +
-        '<input id="opt_' + op.name + '" data-opt="' + op.name + '" value="' + esc(v) + '" ' +
-        (op.type === 'spin' ? 'type="number"' : 'type="text"') + '></div>';
+    function field(op, val) {
+      var id = 'opt_' + op.name;
+      var lab = '<label for="' + id + '">' + esc(op.label || op.name) +
+        ' <span style="color:var(--muted2)">(' + esc(op.name) + ')</span></label>';
+      if (op.type === 'check') {
+        return '<label class="chk" style="margin:4px 0"><input type="checkbox" id="' + id +
+          '" data-opt="' + esc(op.name) + '"' + (val === true || val === 'true' ? ' checked' : '') + '> ' +
+          esc(op.label || op.name) + ' <span style="color:var(--muted2)">(' + esc(op.name) + ')</span></label>';
+      }
+      if (op.type === 'combo') {
+        return '<div class="opt-row">' + lab + '<select class="sel" id="' + id + '" data-opt="' + esc(op.name) + '">' +
+          (op['var'] || []).map(function (v) {
+            return '<option value="' + esc(v) + '"' + (String(v) === String(val) ? ' selected' : '') + '>' + esc(v) + '</option>';
+          }).join('') + '</select></div>';
+      }
+      if (op.type === 'button') {
+        return '<div class="opt-row"><span>' + esc(op.label || op.name) +
+          ' <span style="color:var(--muted2)">(' + esc(op.name) + ')</span></span>' +
+          '<button class="btn btn-mini" data-optbtn="' + esc(op.name) + '">Нажать</button></div>';
+      }
+      var attrs = op.type === 'spin'
+        ? 'type="number"' + (op.min !== undefined ? ' min="' + op.min + '"' : '') + (op.max !== undefined ? ' max="' + op.max + '"' : '')
+        : 'type="text"';
+      return '<div class="opt-row">' + lab + '<input id="' + id + '" data-opt="' + esc(op.name) + '" ' + attrs +
+        ' value="' + esc(val === undefined || val === null ? '' : val) + '"></div>';
+    }
+
+    var html = '<div class="lbl" style="margin-top:11px">Сила поиска (команда go)</div>';
+    d.uciOptions.filter(function (op) { return GO_OPTS.indexOf(op.name) >= 0; }).forEach(function (op) {
+      html += field({ name: op.name, label: GO_RU[op.name] || op.label, type: 'spin', min: op.min, max: op.max },
+        o[op.name] !== undefined ? o[op.name] : '');
     });
     html += '<div class="row" style="gap:6px;margin-top:6px">' +
       Object.keys(d.presets).map(function (p) {
-        return '<button class="btn btn-mini" data-preset="' + p + '">Пресет: ' + esc(p) + '</button>';
+        return '<button class="btn btn-mini" data-preset="' + p + '">Пресет: ' + esc(LEVEL_RU[p] || p) + '</button>';
       }).join('') + '</div>';
+
+    /* опции самого движка: настоящий список приходит от него при рукопожатии
+       (uciok), а до запуска показываем типовые имена из каталога */
+    var det = E.detectedOptions(d.id);
+    html += '<div class="lbl" style="margin-top:14px">Параметры движка (setoption)</div>' +
+      '<div class="hint" style="margin-bottom:7px">' + (det.length
+        ? 'Список получен от самого движка при рукопожатии: ' + det.length + ' настоящих опций с его типами и пределами.'
+        : 'Движок ещё не отвечал на uci — показаны типовые опции. Нажмите «Проверить» (или «Выбрать exe…»), и список заменится настоящим.') + '</div>';
+    var defs = det.length ? det : d.uciOptions.filter(function (op) { return GO_OPTS.indexOf(op.name) < 0; });
+    if (!defs.length) html += '<div class="hint">Движок не объявил ни одной опции.</div>';
+    defs.forEach(function (op) {
+      var val = o[op.name] !== undefined ? o[op.name] : (op['default'] !== undefined ? op['default'] : '');
+      html += field(op, val);
+    });
     return html;
   }
   function bindEngineOptions(d) {
@@ -642,9 +706,19 @@
     };
     document.querySelectorAll('#engineDetail [data-opt]').forEach(function (inp) {
       inp.onchange = function () {
-        var v = inp.type === 'number' ? parseInt(inp.value, 10) : inp.value;
-        E.setOption(d.id, inp.dataset.opt, isNaN(v) ? inp.value : v);
+        var v;
+        if (inp.type === 'checkbox') v = inp.checked;
+        else if (inp.type === 'number') { v = parseInt(inp.value, 10); if (isNaN(v)) v = inp.value; }
+        else v = inp.value;
+        E.setOption(d.id, inp.dataset.opt, v);
         pushEngineLog('setoption name ' + inp.dataset.opt + ' value ' + v);
+      };
+    });
+    /* кнопочные опции UCI (например Clear Hash) значения не имеют */
+    document.querySelectorAll('#engineDetail [data-optbtn]').forEach(function (b) {
+      b.onclick = function () {
+        E.send('setoption name ' + b.dataset.optbtn);
+        pushEngineLog('setoption name ' + b.dataset.optbtn);
       };
     });
     document.querySelectorAll('#engineDetail [data-preset]').forEach(function (b) {
@@ -656,21 +730,47 @@
     });
   }
 
+  /* где брать сам движок: приложение его не распространяет (GPL 3.0 и размер),
+     но ссылки открывает системным браузером через слой платформы */
+  var RODENT_URLS = {
+    site: 'http://www.pkoziol.cal24.pl/rodent/download.htm',
+    repo: 'https://github.com/nescitus/rodent-iv'
+  };
+  function openRodentUrl(kind) {
+    var url = RODENT_URLS[kind];
+    if (!url) return;
+    addLog('Открываю страницу Rodent IV: ' + esc(url), 'arch');
+    P.openExternal(url).then(function (res) {
+      if (!res || !res.ok) toast('БРАУЗЕР НЕ ОТКРЫЛСЯ', 'check', url);
+    }).catch(function () { toast('БРАУЗЕР НЕ ОТКРЫЛСЯ', 'check', url); });
+  }
+
   var RODENT_HELP =
-    'Слой движка уже на месте: каталог, установка файла в IndexedDB, запуск в Web Worker, ' +
-    'протокол UCI (uci / isready / ucinewgame / position fen / go / stop), подписка на info и bestmove, ' +
-    'ограничение глубины, узлов и времени, MultiPV, пресеты под три уровня и настройка «личности».<br><br>' +
-    'Чего не хватает, чтобы партию считал Rodent IV:<br>' +
-    '1. <b>Сборки движка для браузера.</b> Rodent IV распространяется как исполняемый файл Windows и в ' +
-    'веб-сборку не вкладывается (лицензия и размер). Нужен бинарник, скомпилированный в WebAssembly или ' +
-    'asm.js, либо сборка, которую можно запустить нативно в десктоп-обёртке.<br>' +
-    '2. <b>JS-обвязки потока</b> (~100-200 строк): загрузить WASM, подменить файловый ввод-вывод и потоки ' +
-    'на обмен postMessage, прокинуть строки UCI. Её передают в Engines.start() параметром workerSource — ' +
-    'место под неё готово.<br>' +
-    '3. <b>Преобразования хода.</b> Движок отвечает в нотации UCI (e2e4, e7e8q); у движка правил уже есть ' +
-    'Chess.findMove, который принимает from/to/promo, — достаточно разобрать строку.<br><br>' +
-    'После этого переключение сводится к Engines.setActive(&#39;rodent4&#39;), остальное приложение делает само: ' +
-    'тот же поиск хода, тот же интерфейс, те же объявления.';
+    '<b>Что уже сделано в приложении</b><br>' +
+    'Каталог движков; установка файла в IndexedDB (вне архива партий); запуск исполняемого файла ' +
+    'отдельным процессом в десктоп-обёртке; запуск WASM-сборки в Web Worker (JS-обвязка потока вшита ' +
+    'в приложение); протокол UCI (uci / isready / ucinewgame / setoption / position fen / go / stop); ' +
+    'чтение настоящих опций движка из рукопожатия uciok; подписка на info и bestmove; перевод хода из ' +
+    'нотации UCI (e2e4, e7e8q) в ход на доске; ограничение силы (время на ход, глубина, узлы) и пресеты ' +
+    '«Лёгкий / Средний / Сильный»; перезапуск движка при следующем открытии приложения.<br><br>' +
+    '<b>Вариант 1 — версия для компьютера (три действия, ничего программировать не нужно)</b><br>' +
+    '1. Скачайте Rodent IV: финальный пакет автора — FinalRodent.7z на pkoziol.cal24.pl/rodent/download.htm ' +
+    '(или исходники и сборки в репозитории github.com/nescitus/rodent-iv). Движок распространяется под GPL 3.0 ' +
+    'и в наше приложение не вложен: вы добавляете свою копию, она остаётся на вашем устройстве.<br>' +
+    '2. Распакуйте архив (нужен 7-Zip) и запомните папку: рядом с exe лежат каталоги personalities и books — ' +
+    'мы запускаем процесс с рабочей папкой движка, поэтому он найдёт свои файлы.<br>' +
+    '3. Здесь нажмите «🖥 Выбрать exe…» и укажите исполняемый файл. Приложение запустит его процессом, ' +
+    'спросит uci/isready, прочитает список опций и сделает Rodent IV активным движком.<br>' +
+    'Дальше компьютер играет им; путь запоминается, и при следующем запуске процесс поднимется сам. ' +
+    'Сила — пресетами внизу карточки движка, стиль — опцией Personality из настоящего списка опций движка.<br><br>' +
+    '<b>Вариант 2 — браузер и PWA</b><br>' +
+    'Здесь нужен Rodent IV, скомпилированный в WebAssembly (или asm.js): официально движок распространяется ' +
+    'только как исполняемый файл, готовой веб-сборки у автора нет. Если вы соберёте её сами (Emscripten, ' +
+    'WASI-stdio), перетащите файл в поле выше — обвязка потока уже вшита и ожидает от модуля экспорты ' +
+    'init() и commandLine() (или command()), а вывод движка перехватывает через fd_write.<br><br>' +
+    '<b>Итого от вас нужен только файл движка.</b> Если запуск не удался — раскройте «Журнал UCI» в карточке ' +
+    'движка: там видны все строки обмена. Чаще всего мешают антивирус (блокирует запуск exe), 32-битная ' +
+    'сборка без UCI или путь с кириллицей в старой сборке движка.';
 
   function platformNoteHTML() {
     var i = P.info();
@@ -715,30 +815,81 @@
   function useRodent() {
     if (!E.setActive('rodent4')) { toast('Движок недоступен', 'check', 'сначала добавьте файл сборки'); sfx('no'); return; }
     S.setSetting('engine', 'rodent4');
+    E.newGame();
     addLog('Активный движок: <b>Rodent IV</b>. Уровень силы задаётся пресетом UCI.', 'arch');
     toast('RODENT IV АКТИВЕН', 'arch', 'параметры — в карточке движка');
     render();
-    /* пробуем запустить, если есть обвязка потока; иначе честно сообщаем, что нечего запускать */
+    /* пробуем запустить: exe — процессом обёртки, WASM-сборку — в Web Worker */
     testEngine('rodent4');
   }
   function testEngine(id) {
     if (!E.isInstalled(id)) { toast('Движок не установлен', 'check', ''); return; }
-    pushEngineLog('--- проверка ' + id + ' ---');
-    E.start(id, { workerSource: G.workerSource || null }).then(function (r) {
+    pushEngineLog('--- проверка ' + id + (E.isNative(id) ? ' (процесс обёртки)' : ' (Web Worker)') + ' ---');
+    E.start(id, { workerSource: G.workerSource }).then(function (r) {
       pushEngineLog('движок готов: ' + JSON.stringify(r));
-      toast('ДВИЖОК ОТВЕЧАЕТ', 'arch', id + ' готов к работе');
+      var n = E.detectedOptions(id).length;
+      if (n) pushEngineLog('опции движка получены: ' + E.detectedOptions(id).map(function (o) { return o.name; }).join(', '));
+      toast('ДВИЖОК ОТВЕЧАЕТ', 'arch', id + ' готов к работе' + (n ? ' · опций: ' + n : ''));
       renderEngineTab();
+      sfx('save');
     }).catch(function (err) {
       pushEngineLog('ошибка запуска: ' + err.message);
       toast('ДВИЖОК НЕ ЗАПУСТИЛСЯ', 'check', err.message);
       renderEngineTab();
+      sfx('no');
     });
   }
+
+  /* Выбор движка восстанавливается из настроек. Вызывается и при старте, и
+     после чтения хранилища движков: установка внешнего движка лежит в IndexedDB,
+     которая отвечает асинхронно, поэтому на момент restore() её ещё не видно. */
+  function restoreEngineChoice() {
+    var st = S.settings();
+    /* если в настройках значится внешний движок, а его сборки больше нет
+       (удалили файл, очистили хранилище), честно возвращаемся к встроенному боту */
+    if (!st.engine || st.engine === 'builtin') { E.setActive('builtin'); return false; }
+    if (!E.isInstalled(st.engine)) { E.setActive('builtin'); return false; }
+    if (E.activeId() !== st.engine) {
+      E.setActive(st.engine);
+      /* уровень «Лёгкий/Средний/Сильный» для внешнего движка — это пресет UCI */
+      E.applyPreset(st.engine, G.level);
+    }
+    return true;
+  }
+
+  /* Перезапуск нативного движка при старте приложения: путь к exe сохранён в
+     настройках, а сам процесс после закрытия окна, естественно, не живёт.
+     Без этого компьютер после перезапуска молча играл бы встроенным ботом,
+     хотя в настройках выбран Rodent IV. */
+  function restoreNativeEngine() {
+    if (!P.nativeEngineAvailable()) return Promise.resolve(null);
+    var st = S.settings();
+    if (st.engine !== 'rodent4' || !st.engineExe) return Promise.resolve(null);
+    if (!E.isInstalled('rodent4') || !E.isNative('rodent4')) return Promise.resolve(null);
+    pushEngineLog('восстанавливаю процесс движка: ' + st.engineExe);
+    return E.startNative(st.engineExe).then(function (r) {
+      E.setActive('rodent4');
+      E.newGame();
+      pushEngineLog('движок восстановлен: ' + JSON.stringify(r));
+      addLog('<b>Rodent IV</b> запущен снова (' + esc(st.engineExe) + ') — компьютер играет им.', 'arch');
+      renderEngineTab();
+      return r;
+    }).catch(function (err) {
+      pushEngineLog('не удалось восстановить движок: ' + err.message);
+      addLog('Движок <b>Rodent IV</b> не запустился (' + esc(err.message) + ') — компьютер играет встроенным ботом.', 'check');
+      S.setSetting('engine', 'builtin');
+      E.setActive('builtin');
+      toast('RODENT IV НЕ ЗАПУСТИЛСЯ', 'check', err.message);
+      renderEngineTab();
+      return null;
+    });
+  }
+
   function deleteEngine(id) {
-    confirmBox('Удалить файл движка?', 'Сборка будет удалена из локального хранилища. Архив партий и статистика не пострадают. Компьютер вернётся к встроенному боту.', 'Удалить', true, function (okb) {
+    confirmBox('Удалить файл движка?', 'Сборка будет удалена из локального хранилища (или отключена от исполняемого файла). Архив партий и статистика не пострадают. Компьютер вернётся к встроенному боту.', 'Удалить', true, function (okb) {
       if (!okb) return;
       E.uninstall(id).then(function () {
-        S.setSetting('engine', E.activeId());
+        S.setSettings({ engine: E.activeId(), engineExe: null });
         addLog('Файл движка <b>' + esc(id) + '</b> удалён из хранилища.', 'arch');
         toast('ДВИЖОК УДАЛЁН', 'info', 'компьютер снова считает встроенным ботом');
         render();
@@ -1290,6 +1441,10 @@
     }
     var fs = $('btnSetFullscreen');
     if (fs) fs.innerHTML = G.isFull ? '\u{1F5D7} Выйти из полного экрана' : '\u{1F5A5} Полный экран';
+    /* кнопка выхода из приложения видна только там, где приложение есть чем
+       закрыть: в браузере вкладку из страницы не закрыть, поэтому скрываем */
+    var qb = $('btnQuitApp');
+    if (qb) qb.hidden = !P.isDesktop();
   }
   function openSettings(cat) {
     hideTip();
@@ -1348,6 +1503,9 @@
     return tipEl;
   }
   function showTip(el) {
+    /* в режиме дизайнера подсказки не показываем: там своя подпись элемента
+       (рамка подсветки), и два слоя текста поверх интерфейса мешают целиться */
+    if (G.designer) { hideTip(); return; }
     var text = el.getAttribute('data-tip');
     if (!text) { hideTip(); return; }
     ensureTip();
@@ -1588,6 +1746,12 @@
         '<button class="btn primary" data-a="ok">Применить</button>' +
       '</div>';
     var box = openModal(html, true);
+    /* Живой предпросмотр должен быть виден: фон пипетки делается лёгким, а окно
+       настроек (если пипетку открыли из раздела «Цвета») уходит в полупрозрачность.
+       Иначе пользователь двигает ползунки, глядя на затемнённый фон, и не понимает,
+       что именно меняется. Класс снимается в closeModal. */
+    if (box.parentNode) box.parentNode.classList.add('see-through');
+    document.body.classList.add('picker-open');
 
     var $h = box.querySelector('#cpH'), $s = box.querySelector('#cpS'),
       $l = box.querySelector('#cpL'), $a = box.querySelector('#cpA'),
@@ -1713,6 +1877,7 @@
         S.setSetting('theme', vars);
       }
       G.pickerCancel = null;
+      clearFlash();
       closeModal();
       applyThemeNow();
       renderColorsLive();
@@ -1723,8 +1888,49 @@
     box.querySelector('[data-a=def]').addEventListener('click', function () { commit(null); });
 
     /* Esc и любой другой путь закрытия окна — откат предпросмотра */
-    G.pickerCancel = function () { T.apply(t.vars, t.sq, t.adv); };
+    G.pickerCancel = function () { T.apply(t.vars, t.sq, t.adv); clearFlash(); };
     updateUI();
+    flashThemeTargets(target);
+  }
+
+  /* ---------- подсветка «что именно я крашу» ----------
+     При открытии пипетки все элементы, которые красит эта переменная, на
+     полторы секунды обводятся золотом: список из 72 названий сам по себе
+     не отвечает на вопрос «где это видно?», а подсветка отвечает сразу. */
+  var flashTimer = null, flashEls = [];
+  function clearFlash() {
+    if (flashTimer) { clearTimeout(flashTimer); flashTimer = null; }
+    (flashEls || []).forEach(function (el) { try { el.classList.remove('flash-var'); } catch (e) { } });
+    flashEls = [];
+  }
+  function flashThemeTargets(target) {
+    if (!T) return;
+    clearFlash();
+    var sels = [];
+    if (target && target.sq !== undefined && target.sq !== null) {
+      sels = ['#board .sq[data-sq="' + (parseInt(target.sq, 10) || 0) + '"]'];
+    } else if (target && target.v) {
+      sels = T.selectorsFor(target.v);
+      /* переменные, которые app.js ставит инлайн-стилем, ищем по атрибуту */
+      if (!sels.length) sels = ['[style*="' + target.v + '"]'];
+    }
+    var els = [];
+    sels.forEach(function (sel) {
+      try {
+        Array.prototype.forEach.call(document.querySelectorAll(sel), function (el) {
+          if (els.length >= 60) return;
+          if (el.closest && el.closest('.modal-bg')) return;
+          els.push(el);
+        });
+      } catch (e) { /* селектор не поддерживается — пропускаем */ }
+    });
+    els.forEach(function (el) {
+      el.classList.remove('flash-var');
+      void el.offsetWidth;              /* перезапуск анимации */
+      el.classList.add('flash-var');
+    });
+    flashEls = els;
+    flashTimer = setTimeout(clearFlash, 1600);
   }
 
   /* ---------- сброс одного элемента ---------- */
@@ -1893,9 +2099,339 @@
       var b = e.target.closest ? e.target.closest('[data-msq]') : null;
       if (b) openColorPicker({ sq: parseInt(b.dataset.msq, 10) });
     });
+    var bd = $('btnDesigner');
+    if (bd) bd.addEventListener('click', startDesigner);
+  }
+
+  /* ============================ РЕЖИМ ДИЗАЙНЕРА (3.1) ============================
+     Список из 72 элементов — это точно, но непонятно: «Границы элементов»
+     ещё нужно найти глазами. В режиме дизайнера пользователь красит то, что
+     видит: окно настроек закрывается, под курсором подсвечивается элемент,
+     а клик открывает список цветов, которые этот элемент формируют, и
+     пипетку для каждого из них.
+
+     Как определяется элемент: Theme.varsFor разбирает собственный CSS
+     приложения и находит правила, подходящие под элемент (псевдоклассы
+     :hover/:focus при этом отбрасываются — они лишь состояние того же
+     элемента). Поэтому карта не разъезжается со стилями и не пишется руками.
+
+     Правила режима:
+       • клик — выбрать цвет (если цветов несколько — сначала список «что
+         именно перекрасить»);
+       • левый Shift+клик — обычное действие элемента (переход по вкладке,
+         кнопка): клик не перехватывается, рамка подсветки становится синей;
+       • Esc — выход в любом месте (если открыта пипетка, первый Esc закрывает
+         её и откатывает цвет, второй — выводит из режима);
+       • игровые хоткеи (F, M, N, стрелки) в режиме не работают, чтобы
+         случайное нажатие не перевернуло доску посреди настройки. */
+  var designerBound = false;
+  var designerLastEl = null;
+  var shiftLeft = null;          /* null — Shift не нажат; true — левый; false — правый */
+
+  function designerActive() { return G.designer === true; }
+  /* левый Shift — навигация. Если клавишу нажали до входа в режим (события
+     keydown не было), не блокируем обычное действие: shiftKey важнее точности */
+  function isNavEvent(e) { return !!e && e.shiftKey === true && shiftLeft !== false; }
+  /* слои, которые живут своей жизнью: пипетка цвета, плашка режима, подсказка */
+  function designerExempt(el) {
+    if (!el || !el.closest) return false;
+    return !!el.closest('.modal-bg, #designerHud, #tip');
+  }
+
+  /* что именно перекрасит клик по этому элементу */
+  function designerFor(el) {
+    if (!T || !el || !el.closest) return { el: null, vars: [], sq: null };
+    var sqEl = el.closest('#board .sq[data-sq]');
+    if (sqEl) {
+      var sq = parseInt(sqEl.dataset.sq, 10);
+      var adv = themeStore().adv;
+      var dark = T.squareIsDark(sq);
+      var list = [adv
+        ? {
+          sq: sq, n: 'Клетка ' + C.nameOf(sq), label: 'собственный цвет клетки',
+          group: 'Доска и клетки', g: true, rank: 0, order: 0
+        }
+        : {
+          v: dark ? '--dark' : '--light', n: dark ? 'Тёмные клетки' : 'Светлые клетки',
+          label: 'фон', group: 'Доска и клетки', g: true, rank: 0, order: 0
+        }];
+      /* Координаты и фигуры не перехватывают клики (pointer-events:none), поэтому
+         клик всегда попадает в саму клетку. Чтобы их цвета тоже можно было
+         поменять кликом, добавляем переменные самой клетки (подсветка хода,
+         шаха, взятия) и её оформленных потомков (координаты, тень фигур). */
+      var seen = {};
+      seen[list[0].v || ('sq' + sq)] = 1;
+      var addFrom = function (node) {
+        T.varsFor(node, 0).vars.forEach(function (x) {
+          if (list.length >= 9 || seen[x.v]) return;
+          if (x.v === '--light' || x.v === '--dark') return;   /* цвет клетки уже первым пунктом */
+          seen[x.v] = 1;
+          list.push(x);
+        });
+      };
+      addFrom(sqEl);
+      Array.prototype.forEach.call(sqEl.querySelectorAll('.crd, .pc'), addFrom);
+      return { el: sqEl, sq: sq, adv: adv, vars: list };
+    }
+    var r = T.varsFor(el);
+    return { el: r.el, vars: r.vars, sq: null };
+  }
+
+  function setDesignerTarget(text) {
+    var el = $('designerTarget');
+    if (el) el.textContent = text || 'наведите курсор на элемент';
+  }
+
+  /* рамка под курсором и подпись: какие цвета формируют этот элемент */
+  function designerPaint(target, nav) {
+    var hl = $('designerHl');
+    if (!hl) return;
+    var res = designerFor(target);
+    G.designerTarget = res;
+    var box = res.el || target;
+    var r = null;
+    try { r = box.getBoundingClientRect(); } catch (e) { r = null; }
+    if (!r || (!r.width && !r.height)) { hl.classList.remove('on'); setDesignerTarget(''); return; }
+    hl.style.left = Math.round(r.left - 3) + 'px';
+    hl.style.top = Math.round(r.top - 3) + 'px';
+    hl.style.width = Math.max(6, Math.round(r.width + 6)) + 'px';
+    hl.style.height = Math.max(6, Math.round(r.height + 6)) + 'px';
+    hl.classList.add('on');
+    hl.classList.toggle('nav', !!nav);
+    /* у самого верха экрана подпись не помещается над рамкой — уводим её вниз */
+    hl.classList.toggle('below', r.top < 46);
+    var tag = $('designerHlTag');
+    if (tag) {
+      if (!res.vars.length) {
+        tag.innerHTML = 'этот элемент не перекрашивается';
+      } else {
+        var it0 = res.vars[0];
+        var txt = '<b>' + esc(it0.n) + '</b>' + (it0.label ? ' · ' + esc(it0.label) : '');
+        if (res.vars.length > 1) {
+          txt += '<br>и ещё ' + (res.vars.length - 1) + ': ' +
+            esc(res.vars.slice(1).map(function (x) { return x.n; }).join(', '));
+        } else {
+          txt += '<br>' + (nav ? 'Shift: обычное действие' : 'клик — изменить цвет');
+        }
+        tag.innerHTML = txt;
+      }
+    }
+    setDesignerTarget(res.vars.length ? res.vars[0].n : 'не перекрашивается');
+  }
+
+  function designerHover(e) {
+    if (!designerActive()) return;
+    if (designerExempt(e.target)) {
+      var hl = $('designerHl');
+      if (hl) hl.classList.remove('on');
+      G.designerTarget = null;
+      setDesignerTarget('');
+      return;
+    }
+    designerLastEl = e.target;
+    designerPaint(e.target, isNavEvent(e));
+  }
+  function refreshDesigner() {
+    if (designerLastEl) designerPaint(designerLastEl, shiftLeft === true);
+  }
+
+  function designerClick(e) {
+    if (!designerActive()) return;
+    if (designerExempt(e.target)) return;      /* пипетка и плашка работают как обычно */
+    if (isNavEvent(e)) return;                 /* Shift — обычное действие элемента */
+    e.preventDefault();
+    e.stopPropagation();
+    var res = designerFor(e.target);
+    if (!res.vars.length) {
+      toast('Этот элемент не перекрашивается', 'info', 'кликните по панели, кнопке, тексту или клетке доски');
+      sfx('no');
+      return;
+    }
+    if (res.vars.length === 1) { pickDesignerVar(res.vars[0]); return; }
+    openDesignerChooser(res);
+  }
+
+  function pickDesignerVar(item) {
+    if (!item) return;
+    if (item.sq !== undefined && item.sq !== null) openColorPicker({ sq: item.sq });
+    else openColorPicker({ v: item.v });
+  }
+
+  /* список «что именно перекрасить»: у кнопки это фон, фон при наведении,
+     граница и текст — четыре разные переменные темы */
+  function openDesignerChooser(res) {
+    var t = themeStore();
+    var html = '<h2>🎨 Что перекрасить?</h2>' +
+      '<p>Этот элемент формируют несколько цветов темы. Выберите нужный — откроется пипетка.</p>' +
+      '<div class="dpick">';
+    res.vars.forEach(function (it, i) {
+      var val = (it.sq !== undefined && it.sq !== null)
+        ? (Object.prototype.hasOwnProperty.call(t.sq, String(it.sq))
+          ? t.sq[String(it.sq)]
+          : T.effective(t.vars, T.squareIsDark(it.sq) ? '--dark' : '--light'))
+        : T.effective(t.vars, it.v);
+      html += '<button class="dpick-row" type="button" data-i="' + i + '">' +
+        '<i style="background:' + esc(val) + '"></i>' +
+        '<span class="dpick-n"><b>' + esc(it.n) + '</b>' +
+        '<span>' + esc((it.group ? it.group + ' · ' : '') + (it.label || '')) + '</span></span>' +
+        '<span class="dpick-where">' + esc(val) + '</span>' +
+        '</button>';
+    });
+    html += '</div><div class="btns"><button class="btn" data-a="cancel">Отмена</button></div>';
+    var box = openModal(html, true);
+    box.classList.add('wide');      /* строки списка длинные: обычная ширина 470 мала */
+    var list = box.querySelector('.dpick');
+    if (list) list.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.dpick-row') : null;
+      if (!b) return;
+      pickDesignerVar(res.vars[parseInt(b.dataset.i, 10)]);
+      sfx('click');
+    });
+    var cancel = box.querySelector('[data-a=cancel]');
+    if (cancel) cancel.addEventListener('click', function () { closeModal(); });
+  }
+
+  /* сброс элемента под курсором: убираем его переопределения из темы */
+  function resetDesignerElement() {
+    var res = G.designerTarget;
+    if (!res || !res.vars.length) {
+      toast('Наведите курсор на элемент', 'info', 'сброс работает по элементу под курсором');
+      sfx('no');
+      return;
+    }
+    var vars = Object.assign({}, S.settings().theme || {});
+    var n = 0;
+    res.vars.forEach(function (it) {
+      if (it.v && Object.prototype.hasOwnProperty.call(vars, it.v)) { delete vars[it.v]; n++; }
+    });
+    if (res.sq !== null && res.sq !== undefined) {
+      var sqm = Object.assign({}, S.settings().sqColors || {});
+      if (Object.prototype.hasOwnProperty.call(sqm, String(res.sq))) {
+        delete sqm[String(res.sq)];
+        S.setSetting('sqColors', sqm);
+        n++;
+      }
+    }
+    if (!n) { toast('Тут уже цвета по умолчанию', 'info', 'сбрасывать нечего'); sfx('no'); return; }
+    S.setSetting('theme', vars);
+    applyThemeNow();
+    toast('ЦВЕТА СБРОШЕНЫ', 'info', n === 1 ? 'элемент вернулся к оформлению по умолчанию' : 'переопределений удалено: ' + n);
+    sfx('click');
+    refreshDesigner();
+  }
+
+  function startDesigner() {
+    if (!T) return;
+    if (G.modal) closeModal();
+    closeSettings();
+    hideTip();
+    G.designer = true;
+    G.designerTarget = null;
+    designerLastEl = null;
+    document.body.classList.add('designer');
+    var hud = $('designerHud');
+    if (hud) hud.hidden = false;
+    setDesignerTarget('');
+    bindDesigner();
+    addLog('Включён <b>режим дизайнера</b>: клик по элементу меняет его цвет, левый Shift+клик — обычное действие, Esc — выход.', 'arch');
+    toast('РЕЖИМ ДИЗАЙНЕРА', 'arch', 'клик — цвет элемента · левый Shift+клик — как обычно · Esc — выход');
+    sfx('click');
+  }
+  function stopDesigner(silent) {
+    if (!G.designer) return;
+    G.designer = false;
+    G.designerTarget = null;
+    designerLastEl = null;
+    document.body.classList.remove('designer');
+    var hud = $('designerHud');
+    if (hud) hud.hidden = true;
+    var hl = $('designerHl');
+    if (hl) hl.classList.remove('on', 'nav');
+    hideTip();
+    if (!silent) {
+      addLog('Режим дизайнера выключен.', 'info');
+      sfx('click');
+    }
+  }
+
+  function bindDesigner() {
+    if (designerBound) return;
+    designerBound = true;
+    /* перехват в фазе capture: обработчики доски, вкладок и кнопок не успевают
+       сработать, поэтому в режиме дизайнера нельзя случайно сделать ход */
+    document.addEventListener('pointerover', function (e) { if (designerActive()) designerHover(e); }, true);
+    document.addEventListener('pointerdown', function (e) {
+      if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      e.stopPropagation();
+    }, true);
+    document.addEventListener('mousedown', function (e) {
+      if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      e.stopPropagation();
+    }, true);
+    document.addEventListener('click', function (e) { if (designerActive()) designerClick(e); }, true);
+    document.addEventListener('contextmenu', function (e) {
+      if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
+      e.preventDefault();
+      e.stopPropagation();     /* правый клик рисует стрелки разбора — в режиме дизайнера не надо */
+    }, true);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Shift' || e.key === 'ShiftLeft' || e.key === 'ShiftRight') {
+        shiftLeft = (e.location !== 2);
+        if (designerActive()) refreshDesigner();
+      }
+    }, true);
+    document.addEventListener('keyup', function (e) {
+      if (e.key === 'Shift' || e.key === 'ShiftLeft' || e.key === 'ShiftRight') {
+        shiftLeft = null;
+        if (designerActive()) refreshDesigner();
+      }
+    }, true);
+    window.addEventListener('blur', function () { shiftLeft = null; });
+    /* рамка позиционирована фиксированно: при прокрутке и изменении размера
+       она остаётся на старом месте, поэтому её проще погасить до следующего
+       наведения курсора */
+    var hideHl = function () {
+      if (!designerActive()) return;
+      var h = $('designerHl');
+      if (h) h.classList.remove('on');
+    };
+    document.addEventListener('scroll', hideHl, true);
+    window.addEventListener('resize', hideHl);
+    var done = $('btnDesignerDone');
+    if (done) done.addEventListener('click', function () { stopDesigner(); });
+    var und = $('btnDesignerUndo');
+    if (und) und.addEventListener('click', resetDesignerElement);
+    var rst = $('btnDesignerReset');
+    if (rst) rst.addEventListener('click', function () { resetTheme(); refreshDesigner(); });
+  }
+
+  /* ---------- выход из приложения (3.1) ----------
+     Кнопка «⏻ Выход» внизу боковины настроек: в полноэкранном запуске у окна
+     нет ни заголовка, ни крестика, и закрыть приложение было нечем. В браузере
+     кнопка скрыта — вкладку страница закрыть не может. */
+  function quitApp() {
+    var i = P.info();
+    var text = i.desktop
+      ? 'Приложение закроется. Текущая партия, архив, статистика и цветовая тема сохранены — ' +
+        'при следующем запуске всё будет на месте.'
+      : 'В браузере закрыть вкладку из страницы нельзя: используйте Ctrl+W (Cmd+W на Mac). ' +
+        'В версии для компьютера эта кнопка закрывает приложение.';
+    confirmBox('Выйти из игры?', text, i.desktop ? 'Закрыть приложение' : 'Понятно', true, function (ok) {
+      if (!ok || !i.desktop) return;
+      try { flushSave(); } catch (e) { /* партия сохранится следующим автосохранением */ }
+      addLog('Выход из приложения.', 'info');
+      P.quit().then(function (res) {
+        if (res && res.ok) return;
+        toast('НЕ УДАЛОСЬ ЗАКРЫТЬ', 'check', 'закройте окно обычным способом');
+        sfx('no');
+      }).catch(function (err) {
+        toast('НЕ УДАЛОСЬ ЗАКРЫТЬ', 'check', String((err && err.message) || err));
+      });
+    });
   }
 
   var CHANGELOG = [
+    ['3.1', 'Режим дизайнера: цвета теперь меняются кликом по самому интерфейсу. В настройках (⚙) → «Цвета» появилась кнопка «🖌 Режим дизайнера»: окно настроек закрывается, под курсором возникает рамка с названием цветов, которые формируют элемент, а клик открывает список «что именно перекрасить» и пипетку HSL. Карту «элемент → цвет» приложение строит разбором собственного CSS, поэтому она не разъезжается со стилями и покрывает все 72 элемента; при открытии пипетки все элементы, которые красит эта переменная, на полторы секунды обводятся золотом, а фон пипетки и окно настроек становятся полупрозрачными — изменение видно вживую, а не на затемнённом фоне; обычные действия (вкладки, кнопки, ходы) остаются доступны с зажатым левым Shift, выход — Esc в любом месте, а кнопка «↺ Сбросить элемент» убирает переопределения у элемента под курсором. Внизу окна настроек добавлена кнопка «⏻ Выход»: в версии для компьютера она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика), гасит процесс движка и сохраняет партию; в браузере кнопка скрыта. Rodent IV: JS-обвязка Web Worker вшита в единый файл, поэтому WASM-сборку можно добавить и без интернета; исполняемый файл в десктопе теперь считается установленным (кнопки «Использовать», «Проверить», «Удалить» работают), путь запоминается и движок сам поднимается при следующем открытии приложения; список опций читается из рукопожатия UCI — настоящие имена, типы, пределы, галочки, списки «личностей» и кнопки; команды протокола идут в правильном порядке (setoption → ucinewgame → position → go, причём ucinewgame посылается один раз на партию), а при сбое запуска приложение честно возвращается к встроенному боту и пишет причину в журнал UCI. Заодно исправлено: выбранный движок и путь к его файлу терялись при перезапуске (настройки собирались по белому списку ключей), а смена уровня «Лёгкий/Средний/Сильный» не доходила до внешнего движка — теперь уровень применяется как пресет UCI и не затирает настроенные вручную параметры. Справка дополнена разделами о цветах и выходе; подготовлен задел под настройку цвета фигур (переменные --pc-* и сборочный флаг PIECE_THEME — включим в 3.2 после проверки в браузере).'],
     ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
     ['1.1', 'Взятые фигуры стали видны на тёмном фоне; подсветка шаха перемещена под фигуру короля без всплывающей плашки; стрелки и круги правой кнопкой мыши; громкость звука с ползунком.'],
     ['1.2', 'Разгрузка интерфейса: вкладки и панель иконок с подсказками; архив партий в PGN с названиями и именами; профили соперников со счётом и личными встречами; анонимы; импорт PGN с выбором учёта в статистике; выгрузка архива файлом.'],
@@ -1907,7 +2443,7 @@
     ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
     ['2.4', 'Меню приложения «⋮» пересобрано в полноценное окно настроек с категориями: Вид, Архив, Движок, Журнал, Справка и О программе — переход кликом по категории или обычной прокруткой, ползунок окна стилизован под дизайн приложения. Вкладки «Журнал» и «Движок» переехали из бокового меню в настройки; «Перевернуть доску» осталось во вкладке «Ходы»; дубли кнопок (новая партия, вернуть ход, сохранение, выгрузка, стрелки, FEN/PGN, Lichess) убраны — они уже есть в основном меню. Подсказки кнопок переведены в один верхний слой с переносом текста: больше не появляются горизонтальные ползунки и описания не прячутся под вкладки. Напоминание о выгрузке архива можно отключить (настройки → «Архив»). Ошибка проверки обновлений больше не вываливает простыню HTTP-заголовков: короткое сообщение, полный текст — в раскрывающемся блоке «Технические подробности».'],
     ['3.0', 'Дизайнерское обновление: полная настройка цветов. В окне настроек (⚙) появилась категория «Цвета»: 72 элемента интерфейса и доски в пяти раскрывающихся группах — фон и панели, текст и акценты, кнопки и ползунки, доска (клетки, рамка, координаты, подсветки хода, шаха и взятия, тень фигур), а также подсказки, диалог превращения, кнопка Lichess, логотип, плашка просмотра истории и шкала квоты архива. У каждого элемента — HSL-пипетка с готовой палитрой из 36 образцов, HEX-полем, прозрачностью и двухцветными градиентами с настройкой угла; раздел доступен и с клавиатуры (Tab, Enter). Семь готовых палитр: Классика, Лёд, Изумруд, Сепия, Виолет, Багрянец, Графит. Точечная раскраска отдельных клеток a1…h8 с привязкой к полям доски — в расширенном режиме (по умолчанию выключен). Экспорт и импорт темы в JSON с отбрасыванием недопустимых значений, сброс отдельного элемента и всей темы; изменения применяются мгновенно с живым предпросмотром, «Отмена» и Esc возвращают прежний цвет. Обёртка Tauri доведена до собираемого состояния: Cargo.toml, build.rs, capabilities, мост window.Chesster, отдельная папка dist для фронтенда; оценка и план переноса — в TAURI.md.'],
-    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md).'],
+    ['план', 'Цвет шахматных фигур в теме (задел сделан: переменные --pc-* и флаг PIECE_THEME в build.js — включим после проверки в настоящем браузере); лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере/десктопе; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md).'],
   ];
   function showChangelog() { openSettings('help'); }
   function showAbout() { openSettings('about'); }
@@ -2296,6 +2832,8 @@
   }
   function closeModal() {
     if (!G.modal) return;
+    document.body.classList.remove('picker-open');
+    clearFlash();
     /* если закрывается цветовая пипетка (Esc, программное закрытие) —
        откатываем живой предпросмотр темы к сохранённым значениям */
     if (G.pickerCancel) {
@@ -2495,7 +3033,9 @@
     '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать партии без имени (анонимные) в статистике» в настройках (⚙ → «Архив») разрешает или запрещает такой учёт, а кнопка «Очистить анонима» на вкладке «Профили» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
     '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается в настройках (⚙ → «Архив»), там же напоминания можно отключить.</p>' +
     '<h3>Импорт PGN</h3><p>Кнопка «⬆ Импорт» принимает текст или файл с партиями. При импорте предлагается выбрать, учитывать ли эти партии в статистике профилей.</p>' +
-    '<h3>Горячие клавиши</h3><p><span class="kbd">←</span> <span class="kbd">→</span> — разбор ходов, <span class="kbd">↑</span> <span class="kbd">↓</span> — в начало/конец, <span class="kbd">F</span> — перевернуть доску, <span class="kbd">Z</span> — вернуть ход, <span class="kbd">N</span> — новая партия, <span class="kbd">M</span> — боковое меню, <span class="kbd">F11</span> — полный экран, <span class="kbd">Esc</span> — снять выделение или закрыть окно.</p>' +
+    '<h3>Цвета и режим дизайнера</h3><p>Настройки (⚙) → «Цвета»: 72 элемента интерфейса и доски в пяти группах, у каждого — пипетка HSL с палитрой, HEX-кодом, прозрачностью и градиентами. Если не знаете, как элемент называется, включите <b>«🖌 Режим дизайнера»</b>: окно настроек закроется, под курсором появится рамка с названием цветов, а клик откроет список «что именно перекрасить» и пипетку. Обычные действия элементов остаются доступны с зажатым <b>левым Shift</b>, выход — <span class="kbd">Esc</span> в любом месте. Кнопка «↺ Сбросить элемент» в плашке режима убирает переопределения у элемента под курсором.</p>' +
+    '<h3>Выход из приложения</h3><p>В версии для компьютера внизу окна настроек есть кнопка <b>«⏻ Выход»</b>: она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика). Партия, архив, статистика и тема сохраняются автоматически, а процесс внешнего движка (Rodent IV) завершается вместе с окном. В браузере кнопка скрыта: вкладку закрывают обычным способом (<span class="kbd">Ctrl+W</span>).</p>' +
+    '<h3>Горячие клавиши</h3><p><span class="kbd">←</span> <span class="kbd">→</span> — разбор ходов, <span class="kbd">↑</span> <span class="kbd">↓</span> — в начало/конец, <span class="kbd">F</span> — перевернуть доску, <span class="kbd">Z</span> — вернуть ход, <span class="kbd">N</span> — новая партия, <span class="kbd">M</span> — боковое меню, <span class="kbd">F11</span> — полный экран, <span class="kbd">Esc</span> — снять выделение, закрыть окно или выйти из режима дизайнера.</p>' +
     '<h3>Правила полностью</h3><p>Рокировка (включая запрет при шахе и через битое поле), взятие на проходе, превращение пешки с выбором фигуры, запрет ходов, оставляющих своего короля под шахом. Движок сверен с эталонным perft до 5-й глубины.</p>';
 
   /* ============================ ОБЪЯВЛЕНИЕ НАД ДОСКОЙ ============================ */
@@ -2519,6 +3059,7 @@
       var s = C.startState();
       G.states = [s]; G.moves = []; G.sans = [];
       G.keys = [C.positionKey(s, C.legalMoves(s))];
+      E.newGame();          /* внешнему движку положен ucinewgame на новую партию */
       addLog('Новая партия. ' + nom(s.turn) + ' начинают. ' + esc(showName(nameFor('w'))) + ' — ' + esc(showName(nameFor('b'))) + '.', 'info');
       endDrag(); closeModal();
       render(); save();
@@ -2673,7 +3214,7 @@
     G.flipped = !!st.flipped;
     G.autoFlip = !!st.autoFlip;
     G.tab = st.activeTab || 'moves';
-    if (st.engine && st.engine !== 'builtin' && E.isInstalled(st.engine)) E.setActive(st.engine);
+    restoreEngineChoice();
     if (!d || !Array.isArray(d.moves)) return false;
     var h = buildHistory(d.startFen, d.moves);
     G.startFen = d.startFen || null;
@@ -2783,6 +3324,7 @@
     G.keys = [C.positionKey(s, C.legalMoves(s))];
     G.view = 0; G.result = null; G.selected = null; G.targets = [];
     G.gen++; G.thinking = false; G.marks = []; G.savedId = null;
+    E.newGame();          /* новая позиция — внешнему движку нужен ucinewgame */
     if (G.playback) { G.playback = null; G.live = null; $('playbackBar').hidden = true; }
     addLog('Позиция выставлена из FEN. Ход ' + gen(s.turn) + '.', 'info');
     endDrag(); closeModal();
@@ -2891,6 +3433,7 @@
     $('btnSettings').onclick = function (e) { e.stopPropagation(); toggleSettings(); };
     $('btnSetClose').onclick = closeSettings;
     $('setBg').onclick = closeSettings;
+    $('btnQuitApp').onclick = quitApp;
     $('setNav').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-sc]');
       if (!b) return;
@@ -3062,6 +3605,12 @@
       G.level = $('levelSel').value;
       S.setSetting('level', G.level);
       addLog('Уровень компьютера: ' + (LEVEL_RU[G.level] || G.level) + '.', 'info');
+      /* для внешнего движка уровень — это пресет UCI (время, глубина, узлы) */
+      if (E.activeId() !== 'builtin') {
+        E.applyPreset(E.activeId(), G.level);
+        pushEngineLog('уровень «' + (LEVEL_RU[G.level] || G.level) + '» → пресет ' +
+          JSON.stringify(E.getOptions(E.activeId())));
+      }
       renderGameTab(); save();
     };
     function bindName(id, color) {
@@ -3118,15 +3667,24 @@
         return E.startNative(res.path).then(function (r) {
           pushEngineLog('движок запущен: ' + JSON.stringify(r));
           S.setSettings({ engine: 'rodent4', engineExe: res.path });
-          addLog('<b>Rodent IV запущен как процесс</b> (' + esc(res.path) + ').', 'arch');
-          toast('RODENT IV ЗАПУЩЕН', 'arch', 'нативный процесс, UCI-поток подключён');
+          E.newGame();
+          var n = E.detectedOptions('rodent4').length;
+          if (n) pushEngineLog('опции движка получены: ' + E.detectedOptions('rodent4').map(function (o) { return o.name; }).join(', '));
+          addLog('<b>Rodent IV запущен как процесс</b> (' + esc(res.path) + ')' +
+            (n ? ' — движок объявил опций: ' + n : '') + '.', 'arch');
+          toast('RODENT IV ЗАПУЩЕН', 'arch', n ? 'нативный процесс · опций получено: ' + n : 'нативный процесс, UCI-поток подключён');
+          sfx('save');
           render();
         });
       }).catch(function (err) {
         pushEngineLog('ошибка запуска процесса: ' + err.message);
         toast('ДВИЖОК НЕ ЗАПУСТИЛСЯ', 'check', err.message);
+        sfx('no');
+        renderEngineTab();
       });
     };
+    $('btnRodentSite').onclick = function () { openRodentUrl('site'); };
+    $('btnRodentRepo').onclick = function () { openRodentUrl('repo'); };
     $('btnRodentUse').onclick = useRodent;
     $('btnRodentTest').onclick = function () { testEngine('rodent4'); };
     $('btnRodentDel').onclick = function () { deleteEngine('rodent4'); };
@@ -3175,6 +3733,12 @@
       var t = e.target;
       var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
       if (G.modal) { if (e.key === 'Escape') closeModal(); return; }
+      /* режим дизайнера: Esc выводит из режима, игровые хоткеи не работают,
+         чтобы случайное нажатие не перевернуло доску посреди настройки цвета */
+      if (designerActive()) {
+        if (e.key === 'Escape') { e.preventDefault(); stopDesigner(); }
+        return;
+      }
       /* окно настроек модально по клавиатуре: игровые хоткеи не должны
          срабатывать за его спиной, Esc закрывает само окно */
       if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
@@ -3278,7 +3842,13 @@
       G.thinking = false;
       render();
     });
-    E.restoreInstalled().then(function () { render(); }).catch(function () { });
+    E.restoreInstalled().then(function () {
+      restoreEngineChoice();   /* хранилище движков прочитано — теперь выбор виден */
+      render();
+      /* exe-движок, выбранный в прошлый раз, запускается заново: процесс
+         не переживает закрытие окна, а настройка остаётся */
+      return restoreNativeEngine();
+    }).catch(function () { });
     P.notifyReady();
     registerServiceWorker();
     try {
@@ -3290,6 +3860,7 @@
     bind();
     applyThemeNow();      /* сохранённая цветовая тема — до первой отрисовки */
     bindThemeUI();
+    bindDesigner();       /* режим дизайнера: перехват клика и рамка подсветки */
     var restored = restore();
     if (!restored) {
       var s = C.startState();
@@ -3333,7 +3904,12 @@
     toggleSettings: toggleSettings, scrollToCat: scrollToCat, SET_CATS: SET_CATS,
     applyThemeNow: applyThemeNow, openColorPicker: openColorPicker, applyPreset: applyPreset,
     renderColorsLive: renderColorsLive, buildThemeUI: buildThemeUI, exportTheme: exportTheme,
-    importTheme: importTheme, themeStore: themeStore,
+    importTheme: importTheme, themeStore: themeStore, flashThemeTargets: flashThemeTargets,
+    /* режим дизайнера (3.1): красим интерфейс кликом по нему */
+    startDesigner: startDesigner, stopDesigner: stopDesigner, designerActive: designerActive,
+    restoreEngineChoice: restoreEngineChoice, RODENT_URLS: RODENT_URLS,
+    designerFor: designerFor, resetDesignerElement: resetDesignerElement, quitApp: quitApp,
+    restoreNativeEngine: restoreNativeEngine,
     maybeRemindOffload: maybeRemindOffload, showTip: showTip, hideTip: hideTip,
     toggleFullscreen: toggleFullscreen,
     showAbout: showAbout, checkUpdates: checkUpdates,

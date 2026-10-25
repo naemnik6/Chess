@@ -54,5 +54,8 @@ contextBridge.exposeInMainWorld('Chesster', {
 
   /* жизненный цикл */
   appReady: () => Promise.resolve(true),
+  /* кнопка «Выход» в окне настроек: закрываем приложение целиком
+     (главный процесс гасит процесс движка и завершает Electron) */
+  quitApp: () => ipcRenderer.invoke('app:quit'),
   onQuitRequested: (cb) => ipcRenderer.on('app:quit-requested', () => cb())
 });

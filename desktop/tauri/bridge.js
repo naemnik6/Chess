@@ -129,6 +129,14 @@
     updateInfo: function () { return Promise.resolve(null); },
     onUpdaterEvent: function () { /* событий автообновления в Tauri-сборке пока нет */ },
     appReady: function () { return Promise.resolve(true); },
+    /* кнопка «⏻ Выход»: Rust-сторона гасит движок и завершает процесс */
+    quitApp: function () {
+      return invoke('quit_app').then(function () { return { ok: true }; }).catch(function () {
+        var w = curWin();
+        if (w && w.close) { try { w.close(); return { ok: true }; } catch (e) { /* закроем обычным путём */ } }
+        return { ok: false, how: 'browser' };
+      });
+    },
     onQuitRequested: function () { /* Tauri закрывает окно напрямую */ }
   };
 })();

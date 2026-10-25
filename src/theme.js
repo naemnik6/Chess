@@ -1,5 +1,5 @@
 /* =========================================================================
-   Модуль цветовой темы (Theme) — версия 3.0.
+   Модуль цветовой темы (Theme) — версия 3.1.
    Даёт пользователю полный контроль над палитрой приложения:
      • реестр THEME-переменных (72 элемента интерфейса и доски), каждая —
        CSS-переменная из :root; значения по умолчанию точно совпадают
@@ -9,7 +9,10 @@
        фон панелей, кнопок, клеток доски);
      • точечная раскраска отдельных клеток доски (расширенный режим,
        по умолчанию выключен);
-     • готовые палитры-пресеты, экспорт/импорт темы в JSON.
+     • готовые палитры-пресеты, экспорт/импорт темы в JSON;
+     • карта «элемент → переменные» для режима дизайнера: она строится
+       разбором самого CSS приложения, поэтому клик по любому элементу
+       точно знает, какие цвета его формируют.
    Модуль «чистый»: он не знает про Store и настройки — приложение само
    передаёт сюда карты переопределений, а Theme собирает <style id="themeCss">
    в конце <head>, который перекрывает базовые переменные :root.
@@ -582,12 +585,250 @@
     return (r + f) % 2 === 0;
   }
 
+  /* =============== КАРТА «ЭЛЕМЕНТ → ПЕРЕМЕННЫЕ» (режим дизайнера, 3.1) ===============
+     Режим дизайнера обязан точно знать, какие переменные темы формируют вид
+     конкретного элемента — иначе пользователь будет гадать, что именно он
+     перекрашивает. Карту не пишем руками: она собирается из самого CSS
+     приложения. Сканируются все <style>-блоки страницы, и для каждого правила
+     запоминается, какие var(--…) в каком свойстве используются.
+     Карта поэтому никогда не разъезжается со стилями: добавили переменную в
+     style.css — она сразу становится доступна кликом в режиме дизайнера.
+
+     Разбор идёт по тексту, а не через CSSOM: результат одинаков в браузере и
+     в jsdom (тесты) и не зависит от того, знает ли парсер новые свойства
+     (inset, gap, color-mix). Псевдоклассы (:hover, :focus) при сопоставлении
+     отбрасываются — они лишь уточняют состояние того же элемента, а вот
+     псевдоэлемент (::after) сохраняется: подсветки клеток живут именно там. */
+
+  /* чем важнее свойство для восприятия элемента, тем выше кандидат в списке:
+     фон кнопки пользователь хочет перекрасить раньше, чем её тень */
+  var PROP_RANK = {
+    'background': 0, 'background-image': 1, 'background-color': 2,
+    'border': 3, 'border-color': 3, 'border-top': 3, 'border-bottom': 3,
+    'border-left': 3, 'border-right': 3, 'border-top-color': 3, 'border-bottom-color': 3,
+    'border-left-color': 3, 'border-right-color': 3,
+    'box-shadow': 5, 'outline': 5, 'outline-color': 5,
+    'color': 4, 'fill': 4, 'stroke': 4, 'scrollbar-color': 6, 'caret-color': 6
+  };
+  var PROP_LABEL = {
+    'background': 'фон', 'background-image': 'фон', 'background-color': 'фон',
+    'color': 'текст', 'fill': 'заливка', 'stroke': 'обводка',
+    'box-shadow': 'тень', 'outline': 'обводка', 'outline-color': 'обводка',
+    'filter': 'тень и фильтры', 'text-shadow': 'тень текста',
+    'scrollbar-color': 'ползунок', 'caret-color': 'курсор'
+  };
+  function propRank(p) {
+    if (Object.prototype.hasOwnProperty.call(PROP_RANK, p)) return PROP_RANK[p];
+    if (/^border/.test(p)) return 3;
+    if (/^background/.test(p)) return 1;
+    if (p === 'filter' || p === 'text-shadow') return 6;
+    return 7;
+  }
+  function propLabel(p, pseudo) {
+    var base = Object.prototype.hasOwnProperty.call(PROP_LABEL, p) ? PROP_LABEL[p]
+      : (/^border/.test(p) ? 'граница' : p);
+    if (!pseudo) return base;
+    if (/scrollbar-thumb/.test(pseudo)) return 'ползунок прокрутки';
+    if (/scrollbar-track/.test(pseudo)) return 'дорожка прокрутки';
+    if (/scrollbar/.test(pseudo)) return 'прокрутка';
+    if (/^(before|after)$/.test(pseudo)) return base + ' · подложка';
+    return base + ' · ' + pseudo;
+  }
+
+  function stripCssComments(css) {
+    return String(css || '').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  }
+
+  /* разбивка CSS-текста на правила {селектор, тело}; блоки @media/@supports
+     раскрываются (их правила попадают в общий список), @keyframes пропускается */
+  function scanRules(css) {
+    var text = stripCssComments(css);
+    var out = [], stack = [], buf = '';
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === '{') {
+        var sel = buf.trim();
+        buf = '';
+        var inSkip = stack.some(function (f) { return !!f.skip; });
+        if (inSkip || /^@(keyframes|-webkit-keyframes|font-face|property)/i.test(sel)) {
+          stack.push({ skip: 1 });                     /* содержимое не разбираем */
+        } else if (sel.charAt(0) === '@') {
+          stack.push({ at: 1 });                       /* @media/@supports: уровень вложенности */
+        } else {
+          stack.push({ sel: sel, start: i + 1 });
+        }
+        continue;
+      }
+      if (ch === '}') {
+        var top = stack.pop();
+        if (top && top.sel) out.push({ sel: top.sel, body: text.slice(top.start, i) });
+        buf = '';
+        continue;
+      }
+      buf += ch;
+    }
+    return out;
+  }
+
+  /* одна запись карты: переменная, где она используется и как её назвать */
+  function splitSelector(sel) {
+    var out = [];
+    splitTop(sel).forEach(function (raw) {
+      var s = String(raw).trim();
+      if (!s || s.charAt(0) === '@') return;
+      var pm = /::([a-zA-Z-]+)/.exec(s);
+      var pseudo = pm ? pm[1] : null;
+      /* убираем псевдоэлементы и псевдоклассы — остаётся «кто это» */
+      var base = s.replace(/::?[a-zA-Z-]+(\([^)]*\))?/g, '').replace(/\s+/g, ' ').trim();
+      if (!base || base === 'root' || /%/.test(base) || /^(from|to)$/i.test(base)) return;
+      out.push({ base: base, pseudo: pseudo });
+    });
+    return out;
+  }
+
+  var varIndex = null;
+  function buildVarIndex(force) {
+    if (varIndex && !force) return varIndex;
+    varIndex = [];
+    if (!doc || !doc.querySelectorAll) return varIndex;
+    var styles = doc.querySelectorAll('style');
+    var seen = {};
+    for (var s = 0; s < styles.length; s++) {
+      if (styles[s].id === 'themeCss') continue;      /* переопределения темы: там только :root */
+      scanRules(styles[s].textContent).forEach(function (rule) {
+        var sels = splitSelector(rule.sel);
+        if (!sels.length) return;
+        String(rule.body).split(';').forEach(function (decl) {
+          var ci = decl.indexOf(':');
+          if (ci < 1) return;
+          var prop = decl.slice(0, ci).trim().toLowerCase();
+          var val = decl.slice(ci + 1);
+          if (!prop || prop.charAt(0) === '-') return;   /* объявления самих переменных не считаются */
+          var re = /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, m;
+          while ((m = re.exec(val)) !== null) {
+            var v = m[1];
+            if (!Object.prototype.hasOwnProperty.call(DEFAULTS, v)) continue;
+            sels.forEach(function (sl) {
+              var key = sl.base + '|' + (sl.pseudo || '') + '|' + prop + '|' + v;
+              if (seen[key]) return;
+              seen[key] = 1;
+              varIndex.push({
+                base: sl.base, pseudo: sl.pseudo, prop: prop, v: v,
+                rank: propRank(prop), label: propLabel(prop, sl.pseudo),
+                item: BY_VAR[v] || null, order: Object.keys(DEFAULTS).indexOf(v)
+              });
+            });
+          }
+        });
+      });
+    }
+    return varIndex;
+  }
+  function resetVarIndex() { varIndex = null; }
+
+  function matches(el, sel) {
+    if (!el || typeof el.matches !== 'function') return false;
+    try { return el.matches(sel); } catch (e) { return false; }
+  }
+
+  /* переменные в инлайн-стиле элемента: их ставит сам app.js (метка «архив»
+     в статусе партии, образцы цвета, мини-доска), поэтому в CSS-карте их нет */
+  function inlineVars(el) {
+    var out = [];
+    var st = el && el.getAttribute ? el.getAttribute('style') : null;
+    if (!st) return out;
+    var re = /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, m;
+    while ((m = re.exec(st)) !== null) {
+      var v = m[1];
+      if (!Object.prototype.hasOwnProperty.call(DEFAULTS, v)) continue;
+      var it = BY_VAR[v] || null;
+      out.push({
+        v: v, n: it ? it.n : v, label: 'инлайн-стиль', pseudo: null,
+        group: it ? groupName(v) : '', rank: -1, order: -1, g: it ? !!it.g : false
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Какие переменные темы формируют вид элемента.
+   * Возвращает { el, vars:[{v,n,label,group,pseudo,rank,order}] } для ближайшего
+   * предка (включая сам элемент), у которого нашлись соответствия; если ничего
+   * не найдено за maxUp уровней — { el:null, vars:[] }.
+   */
+  function varsFor(el, maxUp) {
+    var idx = buildVarIndex();
+    var node = el, up = 0;
+    maxUp = (maxUp === undefined) ? 6 : maxUp;
+    while (node && node.nodeType === 1 && up <= maxUp) {
+      var found = {}, list = [];
+      inlineVars(node).forEach(function (iv) {
+        if (found[iv.v]) return;
+        found[iv.v] = 1;
+        list.push(iv);
+      });
+      for (var i = 0; i < idx.length; i++) {
+        var e = idx[i];
+        if (found[e.v]) continue;
+        if (!matches(node, e.base)) continue;
+        found[e.v] = 1;
+        list.push({
+          v: e.v, n: e.item ? e.item.n : e.v, label: e.label, pseudo: e.pseudo,
+          group: e.item ? groupName(e.item.v) : '', rank: e.rank, order: e.order,
+          g: e.item ? !!e.item.g : false
+        });
+      }
+      if (list.length) {
+        list.sort(function (a, b) { return (a.rank - b.rank) || (a.order - b.order); });
+        return { el: node, up: up, vars: list };
+      }
+      node = node.parentNode;
+      up++;
+    }
+    return { el: null, up: -1, vars: [] };
+  }
+
+  var GROUP_OF = null;
+  function groupName(v) {
+    if (!GROUP_OF) {
+      GROUP_OF = {};
+      GROUPS.forEach(function (g) { g.items.forEach(function (it) { GROUP_OF[it.v] = g.name; }); });
+    }
+    return GROUP_OF[v] || '';
+  }
+
+  /* Селекторы, к которым применяется переменная: по ним приложение подсвечивает
+     элементы при открытии пипетки — пользователь сразу видит, что именно красит.
+     Псевдоэлементы (::after) отбрасываются: подсветить можно только сам элемент. */
+  function selectorsFor(v) {
+    var idx = buildVarIndex();
+    var out = [], seen = {};
+    for (var i = 0; i < idx.length; i++) {
+      var e = idx[i];
+      if (e.v !== v || seen[e.base]) continue;
+      seen[e.base] = 1;
+      out.push(e.base);
+    }
+    return out;
+  }
+
+  /* сколько переменных темы реально встречается в стилях (диагностика и тесты) */
+  function indexStats() {
+    var idx = buildVarIndex();
+    var vars = {};
+    idx.forEach(function (e) { vars[e.v] = 1; });
+    return { rules: idx.length, vars: Object.keys(vars).length, total: Object.keys(DEFAULTS).length };
+  }
+
   return {
     DEFAULTS: DEFAULTS, GROUPS: GROUPS, PRESETS: PRESETS, PALETTE: PALETTE, BY_VAR: BY_VAR,
     parseColor: parseColor, parseGradient: parseGradient, isGradient: isGradient,
     fmtColor: fmtColor, fmtGradient: fmtGradient,
     hslToRgb: hslToRgb, rgbToHsl: rgbToHsl, rgbToHex: rgbToHex, hexToRgb: hexToRgb,
     sanitize: sanitize, validValue: validValue, validVar: validVar, validSquareKey: validSquareKey,
-    buildCss: buildCss, apply: apply, effective: effective, squareIsDark: squareIsDark
+    buildCss: buildCss, apply: apply, effective: effective, squareIsDark: squareIsDark,
+    /* карта «элемент → переменные» для режима дизайнера (3.1) */
+    varIndex: buildVarIndex, resetVarIndex: resetVarIndex, varsFor: varsFor, selectorsFor: selectorsFor,
+    groupName: groupName, indexStats: indexStats, propLabel: propLabel
   };
 });

@@ -20,7 +20,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const RELEASES = 'https://github.com/naemnik6/Chess/releases/latest';
 
 /* ---------- мок electron ---------- */
-const state = { external: [], dialogs: [], sent: [], handles: {}, on: {}, packaged: true, dialogResponse: 1, loads: [] };
+const state = { external: [], dialogs: [], sent: [], handles: {}, on: {}, packaged: true, dialogResponse: 1, loads: [], quitCalled: 0 };
 class WebContents {
   send(ch, payload) { state.sent.push({ ch, payload }); }
   on() { } setWindowOpenHandler() { }
@@ -43,7 +43,7 @@ const electronMock = {
     setAppUserModelId: () => { },
     getPath: (p) => p === 'exe' ? path.join(tmpRoot, 'Chess.exe') : path.join(tmpRoot, 'userdata'),
     getAppPath: () => path.join(tmpRoot, 'appdir'),
-    quit: () => { }
+    quit: () => { state.quitCalled++; }
   },
   BrowserWindow,
   Menu: { setApplicationMenu: () => { }, buildFromTemplate: () => ({}) },
@@ -169,6 +169,13 @@ require(path.join(__dirname, 'main.js'));
   stages = state.sent.filter(e => e.ch === 'updater:event').map(e => e.payload.stage);
   ok(stages.includes('check-requested') && stages.includes('checking-for-update'),
     'при запуске выполнена фоновая проверка: ' + stages.join(', '));
+
+  console.log('\n— Выход из приложения (кнопка «⏻ Выход», 3.1) —');
+  ok(typeof state.handles['app:quit'] === 'function', 'IPC-обработчик app:quit зарегистрирован');
+  state.quitCalled = 0;
+  const qres = await state.handles['app:quit']({});
+  ok(qres && qres.ok === true, 'app:quit отвечает {ok:true} — страница узнает, что выход принят');
+  ok(state.quitCalled === 1, 'app.quit() вызван: приложение закрывается, а не остаётся в памяти');
 
   console.log('\n============================');
   console.log('smoketest main.js: пройдено ' + pass + ', провалено ' + fail);

@@ -91,11 +91,15 @@
   /* ---------- состояние выбранного движка ---------- */
   var state = {
     active: 'builtin',
-    installed: {},        /* id -> {size, added, name, note} */
+    installed: {},        /* id -> {size, added, name, note, native?, path?} */
     options: {},          /* id -> {опция: значение} */
+    detected: {},         /* id -> опции, которые движок сам назвал при рукопожатии */
     worker: null,
+    native: false,
     ready: false,
-    busy: false
+    busy: false,
+    needNewGame: true,    /* ucinewgame шлём один раз на партию, а не на каждый ход */
+    optsDirty: true       /* параметры UCI нужно (пере)послать движку */
   };
 
   function keyFile(id) { return 'engine:' + id; }
@@ -128,12 +132,18 @@
   }
 
   function uninstall(id) {
+    var wasActive = state.active === id;
     state.installed[id] = null;
     delete state.installed[id];
+    delete state.detected[id];
     var def = byId(id);
     if (def) def.available = false;
-    if (state.active === id) state.active = 'builtin';
-    return Promise.all([P.delFile(keyFile(id)), P.delFile(keyMeta(id))]).then(function () { return true; });
+    if (wasActive) state.active = 'builtin';
+    /* запущенный процесс или поток нужно погасить: иначе Rodent IV останется
+       висеть в памяти устройства после удаления из интерфейса */
+    return (wasActive ? stop() : Promise.resolve(true)).then(function () {
+      return Promise.all([P.delFile(keyFile(id)), P.delFile(keyMeta(id))]);
+    }).then(function () { return true; });
   }
 
   /* восстановить список установленных движков при старте */
@@ -143,10 +153,12 @@
         if (!raw) return;
         try {
           var meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
-          if (meta && meta.id) {
-            state.installed[meta.id] = meta;
-            d.available = true;
-          }
+          if (!meta || !meta.id) return;
+          /* запись о нативном движке имеет смысл только там, где обёртка умеет
+             запускать процессы: в браузере такой движок не восстановить */
+          if (meta.native && !P.nativeEngineAvailable()) return;
+          state.installed[meta.id] = meta;
+          d.available = true;
         } catch (e) { /* повреждённая запись — просто игнорируем */ }
       });
     });
@@ -154,6 +166,28 @@
   }
   function installedIds() {
     return Object.keys(state.installed).filter(function (k) { return !!state.installed[k]; });
+  }
+  function isNative(id) { return !!(state.installed[id] && state.installed[id].native); }
+  function nativePath(id) { return (state.installed[id] && state.installed[id].path) || null; }
+
+  /* Нативный движок (исполняемый файл, запущенный обёрткой) тоже считается
+     установленным: у него нет бинарника в хранилище, но карточка, кнопки
+     «Использовать/Проверить/Удалить» и выбор активного движка должны работать
+     так же, как с WASM-сборкой. Запись помечается native:true и хранит путь. */
+  function baseName(p) {
+    var s = String(p || '').replace(/\\/g, '/');
+    return s.slice(s.lastIndexOf('/') + 1) || String(p || '');
+  }
+  function registerNative(id, exePath) {
+    var def = byId(id);
+    var meta = {
+      id: id, name: baseName(exePath), size: 0, added: new Date().toISOString(),
+      storage: 'файл на устройстве', native: true, path: String(exePath || ''),
+      note: 'запускается отдельным процессом обёрткой'
+    };
+    state.installed[id] = meta;
+    if (def) def.available = true;
+    return P.putFile(keyMeta(id), JSON.stringify(meta)).then(function () { return meta; }, function () { return meta; });
   }
 
   /* ---------- опции движка ---------- */
@@ -167,14 +201,18 @@
   function setOption(id, name, value) {
     var o = getOptions(id);
     o[name] = value;
-    if (state.active === id && state.worker) send('setoption name ' + name + ' value ' + value);
+    state.optsDirty = true;
+    if (state.active === id && (state.worker || state.native)) send('setoption name ' + name + ' value ' + value);
     return o;
   }
   function applyPreset(id, level) {
     var def = byId(id);
     if (!def || !def.presets || !def.presets[level]) return getOptions(id);
-    state.options[id] = Object.assign({}, def.presets[level]);
-    if (state.active === id && state.worker) {
+    /* пресет силы дополняет опции, а не затирает их: Hash, Threads и «личность»
+       пользователь мог выставить сам, и смена уровня не должна их терять */
+    state.options[id] = Object.assign({}, state.options[id] || {}, def.presets[level]);
+    state.optsDirty = true;
+    if (state.active === id && (state.worker || state.native)) {
       Object.keys(state.options[id]).forEach(function (k) {
         send('setoption name ' + k + ' value ' + state.options[id][k]);
       });
@@ -204,17 +242,52 @@
   }
 
   /* ---------- разбор строки, пришедшей от движка (общий для worker и процесса) ---------- */
+  /* option name Hash type spin default 16 min 1 max 33554432
+     option name Ponder type check default false
+     option name Personality type combo default balanced var calm var balanced
+     Настоящие опции движка узнаются из рукопожатия: список из каталога — это
+     лишь запасной вариант, пока движок не ответил uciok. */
+  function parseUciOption(line) {
+    var m = /^option\s+name\s+(.+?)\s+type\s+(button|check|combo|string|spin)\b([\s\S]*)$/i.exec(line);
+    if (!m) return null;
+    var name = m[1].trim();
+    var rest = m[3] || '';
+    var op = { name: name, type: m[2].toLowerCase(), label: name };
+    var dm = /\bdefault\s+([\s\S]*?)(?=\s+(?:min|max|var)\s|$)/i.exec(rest);
+    if (dm && dm[1] !== '') op['default'] = dm[1].trim();
+    var mn = /\bmin\s+(-?\d+)/i.exec(rest);
+    if (mn) op.min = parseInt(mn[1], 10);
+    var mx = /\bmax\s+(-?\d+)/i.exec(rest);
+    if (mx) op.max = parseInt(mx[1], 10);
+    var vs = rest.match(/\bvar\s+[^\s]+/gi);
+    if (vs && vs.length) op['var'] = vs.map(function (x) { return x.replace(/^var\s+/i, ''); });
+    return op;
+  }
+
   function handleUciLine(line) {
     line = String(line || '').trim();
     if (!line) return;
-    if (line === 'uciok') { emit('status', { log: line }); return; }
+    if (/^option\s+name\s+/i.test(line)) {
+      var op = parseUciOption(line);
+      if (op) {
+        var list = state.detected[state.active] || (state.detected[state.active] = []);
+        for (var i = 0; i < list.length; i++) if (list[i].name === op.name) return;
+        list.push(op);
+      }
+      return;
+    }
+    if (line === 'uciok') {
+      emit('status', { uciok: true, log: line, id: state.active, options: (state.detected[state.active] || []).slice() });
+      return;
+    }
     if (line === 'readyok') { state.ready = true; emit('status', { ready: true, id: state.active }); return; }
     if (line.indexOf('bestmove') === 0) {
       var parts = line.split(/\s+/);
       state.busy = false;
       var bi = state.lastInfo || {};
+      var mv = (parts[1] && parts[1] !== '(none)' && /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(parts[1])) ? parts[1] : null;
       emit('bestmove', {
-        move: parts[1] || null, ponder: parts[3] || null, line: line,
+        move: mv, ponder: parts[3] || null, line: line,
         depth: bi.depth, score: bi.score, nodes: bi.nodes
       });
       state.lastInfo = null;
@@ -235,6 +308,20 @@
     emit('status', { log: line });
   }
 
+  /* опции, которые движок назвал сам (пусто, если рукопожатия ещё не было) */
+  function detectedOptions(id) { return (state.detected[id || state.active] || []).slice(); }
+
+  /* (пере)послать параметры UCI: делается перед первым поиском и после смены
+     пресета, а не на каждом ходу — движки этого не любят */
+  function pushOptions(id) {
+    var opt = getOptions(id);
+    Object.keys(opt).forEach(function (k) {
+      if (k === 'MoveTime' || k === 'DepthLimit' || k === 'NodeLimit') return;  /* это параметры go */
+      send('setoption name ' + k + ' value ' + opt[k]);
+    });
+    state.optsDirty = false;
+  }
+
   /**
    * Запуск внешнего движка в Web Worker.
    * workerSource — текст JS-обвязки, которая грузит WASM/asm.js и гоняет UCI.
@@ -246,6 +333,11 @@
     if (!def) return Promise.reject(new Error('неизвестный движок'));
     if (def.kind === 'js') { state.active = id; state.ready = true; return Promise.resolve({ ok: true, kind: 'js' }); }
     if (!isInstalled(id)) return Promise.reject(new Error('движок не установлен — добавьте свой файл сборки'));
+    /* сборка добавлена как исполняемый файл (десктоп) — запускаем процессом */
+    if (isNative(id)) return startNative(nativePath(id));
+    if (!opts.workerSource) {
+      return Promise.reject(new Error('нет JS-обвязки потока (workerSource) для запуска WASM-сборки'));
+    }
     if (typeof win === 'undefined' || !win.Worker || !win.URL || !win.URL.createObjectURL) {
       return Promise.reject(new Error('этот браузер не поддерживает Web Worker'));
     }
@@ -262,6 +354,9 @@
       state.worker = w;
       state.active = id;
       state.ready = false;
+      state.needNewGame = true;
+      state.optsDirty = true;
+      state.detected[id] = [];
       w.onmessage = function (e) {
         var d = e.data || {};
         if (d.type === 'ready') { state.ready = true; emit('status', { ready: true, id: id }); }
@@ -299,14 +394,19 @@
     if (!P.nativeEngineAvailable()) {
       return Promise.reject(new Error('нативный запуск движка доступен только в десктоп-версии'));
     }
+    if (!exePath) return Promise.reject(new Error('не указан путь к исполняемому файлу движка'));
     return stop().then(function () {
       return P.spawnEngine(exePath);
     }).then(function (res) {
-      if (!res || res.ok === false) throw new Error((res && res.error) || 'не удалось запустить движок');
+      /* Electron отвечает {ok,pid}, Tauri — просто pid: приводим к одному виду */
+      var pid = (typeof res === 'number') ? res : (res && res.pid);
+      if (res && res.ok === false) throw new Error(res.error || 'не удалось запустить движок');
+      if (res === null || res === undefined || res === false) throw new Error('обёртка не ответила на запуск движка');
       state.native = true;
       state.active = 'rodent4';
-      var def = byId('rodent4');
-      if (def) def.available = true;
+      state.needNewGame = true;
+      state.optsDirty = true;
+      state.detected.rodent4 = [];
       if (!state.nativeWired) {
         state.nativeWired = true;
         P.onEngineLine(handleUciLine);
@@ -319,16 +419,23 @@
           emit('error', { message: msg });
         });
       }
-      return new Promise(function (resolve, reject) {
-        var t = setTimeout(function () {
-          if (!state.ready) reject(new Error('движок не ответил на uci/isready за 15 секунд'));
-        }, 15000);
-        var un = function (d) {
-          if (d && d.ready) { clearTimeout(t); off('status', un); resolve({ ok: true, kind: 'native', pid: res.pid }); }
-        };
-        on('status', un);
-        send('uci');
-        send('isready');
+      /* движок помечается установленным: карточка, кнопки и выбор активного
+         работают так же, как с WASM-сборкой, а путь запоминается для перезапуска */
+      return registerNative('rodent4', exePath).then(function (meta) {
+        return new Promise(function (resolve, reject) {
+          var t = setTimeout(function () {
+            if (!state.ready) reject(new Error('движок не ответил на uci/isready за 15 секунд'));
+          }, 15000);
+          var un = function (d) {
+            if (d && d.ready) {
+              clearTimeout(t); off('status', un);
+              resolve({ ok: true, kind: 'native', pid: pid, name: meta.name, options: detectedOptions('rodent4') });
+            }
+          };
+          on('status', un);
+          send('uci');
+          send('isready');
+        });
       });
     });
   }
@@ -343,8 +450,16 @@
       }
       state.ready = false;
       state.busy = false;
+      state.optsDirty = true;      /* после перезапуска параметры нужно послать заново */
       resolve(true);
     });
+  }
+
+  /* новая партия: движку положен ucinewgame (сброс хэша и истории), но слать
+     его на каждый ход нельзя — флаг обрабатывается следующим поиском */
+  function newGame() {
+    state.needNewGame = true;
+    return true;
   }
 
   /* ---------- ход ---------- */
@@ -402,13 +517,13 @@
       }
       on('bestmove', onBest); on('info', onInfo); on('error', onErr);
 
-      send('ucinewgame');
-      send('position fen ' + fen);
-      Object.keys(opt).forEach(function (k) {
-        if (k === 'MoveTime' || k === 'DepthLimit' || k === 'NodeLimit') return;
-        send('setoption name ' + k + ' value ' + opt[k]);
-      });
+      /* порядок команд по протоколу UCI: сначала параметры и ucinewgame,
+         затем позиция и поиск. Раньше setoption уходил после position,
+         а ucinewgame — на каждом ходу: движки сбрасывали хэш и ругались. */
+      if (state.optsDirty) pushOptions(id);
+      if (state.needNewGame) { send('ucinewgame'); state.needNewGame = false; }
       send('isready');
+      send('position fen ' + fen);
       state.busy = true;
       send('go ' + goParts.join(' '));
     });
@@ -432,6 +547,8 @@
       active: state.active, name: def.name, kind: def.kind,
       ready: def.kind === 'js' ? true : state.ready,
       busy: state.busy, installed: installedIds(),
+      native: !!state.native, path: nativePath(state.active),
+      options: detectedOptions(state.active).length,
       desktop: P.isDesktop(), env: P.env
     };
   }
@@ -445,6 +562,9 @@
     getOptions: getOptions, setOption: setOption, applyPreset: applyPreset,
     start: start, startNative: startNative, stop: stop, send: send, on: on, off: off,
     nativeAvailable: function () { return P.nativeEngineAvailable(); },
+    /* нативный движок (исполняемый файл обёртки) и опции из рукопожатия UCI */
+    isNative: isNative, nativePath: nativePath, registerNative: registerNative,
+    detectedOptions: detectedOptions, parseUciOption: parseUciOption, newGame: newGame,
     searchMove: searchMove, stopSearch: stopSearch,
     activeId: activeId, setActive: setActive, status: status
   };

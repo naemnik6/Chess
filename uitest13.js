@@ -114,7 +114,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
   console.log('\n— 3.0: раздел «Цвета» в настройках —');
   ok(App.SET_CATS.indexOf('colors') === 1, 'категория «Цвета» — вторая в списке: ' + App.SET_CATS.join(','));
-  ok(qa('#setNav button').length === 7, 'в боковине настроек семь категорий');
+  ok(qa('#setNav button[data-sc]').length === 7, 'в боковине настроек семь категорий');
   ok(q('#setNav button[data-sc=colors]') !== null, 'кнопка «🌈 Цвета» есть в навигации');
   ok(q('#setScroll section[data-set=colors]') !== null, 'раздел data-set="colors" существует');
   App.openSettings('colors');
@@ -357,7 +357,10 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ' переменных)' + (drift.length ? ': ' + drift.join(', ') : ''));
   /* переменная может применяться и в стилях, и в разметке, которую собирает app.js */
   const scope = css.replace(rootBlock, '') + '\n' + appSrc;
-  const unusedVars = Object.keys(T.DEFAULTS).filter(k => !scope.includes('var(' + k));
+  /* строгая проверка: var(--panel) и var(--panel2) — разные переменные,
+     поэтому смотрим на закрывающий символ, а не на префикс имени */
+  const usedVar = k => new RegExp('var\\(' + k.replace(/-/g, '\\-') + '[),\\s]').test(scope);
+  const unusedVars = Object.keys(T.DEFAULTS).filter(k => !usedVar(k));
   ok(unusedVars.length === 0, 'каждая переменная темы действительно применяется в стилях' +
     (unusedVars.length ? ' (не используются: ' + unusedVars.join(', ') + ')' : ''));
   ok(css.includes('background:var(--tip-bg);color:var(--tip-text);border:1px solid var(--tip-line)'),
@@ -375,12 +378,13 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(!/style="[^"]*color:#[0-9a-f]/i.test(appSrc), 'в разметке из app.js не осталось инлайновых HEX-цветов — только var()');
 
   console.log('\n— 3.0: релиз-файлы —');
-  ok(App.version().app === V && V === '3.0', 'версия приложения ' + V);
+  /* версия берётся из version.json: тест проверяет тему 3.0, а не номер релиза */
+  ok(App.version().app === V && /^\d+\.\d+$/.test(V), 'версия приложения ' + V);
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(sw.includes("chesster-" + V), 'кэш сервис-воркера содержит версию ' + V);
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
   ok(/^[\x00-\x7F]*$/.test(bat), 'push-release.bat — только ASCII');
-  ok(bat.includes('Release 3.0') && bat.includes('v3.0.0'), 'bat обновлён до v3.0.0');
+  ok(bat.includes('Release ' + V) && bat.includes('v' + PV), 'bat обновлён до v' + PV);
   ok(JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8')).version === PV,
     'desktop/package.json: ' + PV);
   const cl = App.CHANGELOG.map(r => r[0]);
@@ -389,7 +393,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/Цвета/.test(cl30) && /пипетк/i.test(cl30) && /градиент/i.test(cl30) && /Tauri/.test(cl30),
     'запись 3.0 описывает цвета, пипетку, градиенты и Tauri');
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  ok(readme.includes('3.0'), 'README упоминает версию 3.0');
+  ok(readme.includes(V), 'README упоминает текущую версию ' + V);
   ok(fs.existsSync(path.join(ROOT, 'TAURI.md')), 'TAURI.md на месте');
 
   console.log('\n— 3.0: каркас Tauri собираемый —');
@@ -424,11 +428,11 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const mainrs = fs.readFileSync(path.join(tdir, 'src/main.rs'), 'utf8');
   ok(mainrs.includes('initialization_script') && mainrs.includes('include_str!("../bridge.js")'),
     'main.rs внедряет мост до загрузки страницы');
-  ok(mainrs.includes('pick_engine') && mainrs.includes('save_file, open_external, pick_engine, engine_spawn, engine_write, engine_kill'),
-    'команда pick_engine зарегистрирована в invoke_handler');
+  ok(mainrs.includes('pick_engine') && mainrs.includes('save_file, open_external, pick_engine, engine_spawn, engine_write, engine_kill, quit_app'),
+    'команды pick_engine и quit_app зарегистрированы в invoke_handler');
   ok(mainrs.includes('CREATE_NO_WINDOW'), 'движок под Windows запускается без консольного окна');
-  ok((mainrs.match(/#\[tauri::command\(async\)\]/g) || []).length === 6,
-    'все шесть команд помечены (async): диалоги не блокируют главный поток окна');
+  const asyncCmds = (mainrs.match(/#\[tauri::command\(async\)\]/g) || []).length;
+  ok(asyncCmds === 7, 'все семь команд помечены (async): диалоги не блокируют главный поток окна');
   ok(mainrs.includes('fn save_file(app: AppHandle, name: String, data: String)'),
     'save_file принимает текст: вложенные Uint8Array JSON-транспорт Tauri не переносит');
   ok(mainrs.includes('RunEvent::Exit') && mainrs.includes('kill_engine'),
