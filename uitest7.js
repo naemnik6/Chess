@@ -188,7 +188,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
   console.log('\n— Обёртки на диске —');
   const files = ['desktop/main.js', 'desktop/preload.js', 'desktop/package.json',
-    'desktop/rodent4-worker.js', 'desktop/tauri/tauri.conf.json', 'desktop/tauri/src/main.rs',
+    'desktop/rodent4-worker.js',
     'desktop/icons/icon-512.png', 'desktop/icons/icon.ico', 'desktop/icons/icon.svg', 'desktop/icon.py'];
   files.forEach(f => ok(fs.existsSync(__dirname + '/' + f), 'есть ' + f));
   const main = fs.readFileSync(__dirname + '/desktop/main.js', 'utf8');
@@ -198,10 +198,6 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/spawn\(exePath/.test(main), 'Electron: внешний движок запускается отдельным процессом');
   const preload = fs.readFileSync(__dirname + '/desktop/preload.js', 'utf8');
   ok(/contextBridge\.exposeInMainWorld\('Chesster'/.test(preload), 'preload отдаёт странице только узкий мост window.Chesster');
-  const tauri = fs.readFileSync(__dirname + '/desktop/tauri/src/main.rs', 'utf8');
-  ok(/#\[tauri::command(\(async\))?\]/.test(tauri) && /save_file/.test(tauri) &&
-    /open_external/.test(tauri) && /engine_spawn/.test(tauri),
-    'Tauri: команды сохранения, ссылок и запуска движка');
 
   console.log(`\nИТОГ: ${pass} пройдено, ${fail} провалено`);
   process.exit(fail ? 1 : 0);

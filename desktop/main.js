@@ -269,6 +269,21 @@ ipcMain.handle('engine:pick', async () => {
    ни заголовка, ни крестика, поэтому закрыть приложение из интерфейса было
    нечем. Гасим процесс внешнего движка, закрываем окно и завершаем Electron —
    страница не должна оставлять приложение висящим в памяти. */
+/* ---------- 3.3: движок, предустановленный с приложением ----------
+   Установщик (electron-builder, extraResources) кладёт Rodent V в resources/engine/.
+   Движок распространяется под GPL как отдельная программа; текст лицензии лежит
+   рядом (LICENSE-GPL.txt). В dev-сборке и portable без ресурсов — просто null. */
+ipcMain.handle('engine:bundled', async () => {
+  try {
+    const dir = path.join(process.resourcesPath, 'engine');
+    for (const name of ['rodent_v_1.2.exe', 'rodent_v.exe', 'rodent.exe']) {
+      const p = path.join(dir, name);
+      if (fs.existsSync(p)) return p;
+    }
+  } catch (e) { /* не упаковано или нет доступа — предустановки нет */ }
+  return null;
+});
+
 ipcMain.handle('app:quit', async () => {
   if (engineChild) { try { engineChild.kill(); } catch (e) { } engineChild = null; }
   try {

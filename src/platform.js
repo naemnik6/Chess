@@ -1,7 +1,7 @@
 /* =========================================================================
    Слой платформы: один и тот же код работает в браузере и в десктоп-обёртке
-   (Electron / Tauri). Отвечает за:
-     • определение среды (браузер / electron / tauri);
+   (Electron). Отвечает за:
+     • определение среды (браузер / electron);
      • открытие внешних ссылок и скачивание файлов (в десктопе — нативно);
      • загрузку внешних движков (сейчас задел под Rodent IV) из памяти,
        а не из localStorage, чтобы не занимать место архива партий;
@@ -25,16 +25,13 @@
   function detect() {
     var ua = (nav && nav.userAgent) || '';
     var hasChesster = !!(win && win.Chesster);
-    var tauri = hasChesster && !!(win.Chesster.tauri || win.Chesster.__TAURI__ ||
-      (win.__TAURI__ || win.__TAURI_INTERNALS__));
-    if (tauri) return 'tauri';
     if (hasChesster || /Chesster/i.test(ua)) return 'electron';
     if (win && win.process && win.process.versions && win.process.versions.electron) return 'electron';
     return 'browser';
   }
   var env = detect();
 
-  function isDesktop() { return env === 'electron' || env === 'tauri'; }
+  function isDesktop() { return env === 'electron'; }
   function bridge() { return (win && win.Chesster) || null; }
   function info() {
     return {
@@ -346,6 +343,16 @@
     return callBridge('setTitle', { text: text });
   }
 
+  /* 3.3: путь к движку, предустановленному установщиком (только десктоп;
+     в браузере и без обёртки — null). Возвращает Promise. */
+  function bundledEnginePath() {
+    var b = bridge();
+    if (b && typeof b.bundledEnginePath === 'function') {
+      try { return Promise.resolve(b.bundledEnginePath()); } catch (e) { return Promise.resolve(null); }
+    }
+    return Promise.resolve(null);
+  }
+
   return {
     env: env, isDesktop: isDesktop, info: info, bridge: bridge,
     openExternal: openExternal, saveFile: saveFile, readFileRef: readFileRef,
@@ -356,6 +363,7 @@
     quit: quit,
     setFullscreen: setFullscreen, isFullscreen: isFullscreen, onFullscreenChange: onFullscreenChange,
     nativeEngineAvailable: nativeEngineAvailable, pickEngineFile: pickEngineFile,
+    bundledEnginePath: bundledEnginePath,
     spawnEngine: spawnEngine, engineWrite: engineWrite, engineKill: engineKill,
     onEngineLine: onEngineLine, onEngineExit: onEngineExit, onEngineError: onEngineError,
     notifyReady: notifyReady, appVersion: appVersion, setBadge: setBadge, setTitle: setTitle

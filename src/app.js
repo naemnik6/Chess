@@ -124,7 +124,13 @@
   function pieceHTML(pc, cls) {
     if (!pc) return '';
     var w = pc === pc.toUpperCase();
-    var id = 'pc-' + (w ? 'w' : 'b') + pc.toUpperCase();
+    var suffix = (w ? 'w' : 'b') + pc.toUpperCase();
+    /* 3.3: активный набор фигур; при отсутствии группы в спрайте — откат на Cburnett */
+    var setId = pieceSetId();
+    var id = setId === 'cburnett' ? ('pc-' + suffix) : ('pc-' + setId + '-' + suffix);
+    if (setId !== 'cburnett' && typeof document !== 'undefined' && !document.getElementById(id)) {
+      id = 'pc-' + suffix;
+    }
     /* Цвет тела фигуры наследуется внутрь <use>: у чёрных ферзя, ладьи и пешки
        в спрайте fill не задан явно, и они берут его отсюда. Явные fill/stroke
        в спрайте заменены на var(--pc-*) сборщиком (флаг PIECE_THEME). Значения
@@ -217,7 +223,8 @@
     'var(--mark-1,#3aa0ff)', 'var(--mark-2,#ffb02e)',
     'var(--mark-3,#ff5f5f)', 'var(--mark-4,#57d97a)'
   ];
-  /* удержание правой кнопки на одной клетке открывает выбор цвета меток (3.2) */
+  /* удержание правой кнопки на одной клетке открывает меню «Стрелки и метки» (3.3):
+     один цвет / чередование, расширенный режим — мини-панель справа от доски */
   var MARK_HOLD_MS = 500;
   var markDrag = null;
 
@@ -262,6 +269,85 @@
     renderMarks(); save();
     if (!quiet) { sfx('click'); toast('СТРЕЛКИ СТЁРТЫ', 'info', ''); }
   }
+  /* ---------- 3.3: цвет следующей метки (один или чередование) ----------
+     Настройки: markAlt (чередование четырёх цветов, по умолчанию включено —
+     поведение 3.2), markColor (0..3 — цвет одиночного режима), markPanel
+     (расширенный режим: мини-панель справа от доски). Управление из трёх
+     мест: меню по удержанию ПКМ, мини-панель и настройки → «Цвета». */
+  function normMarkColor(c) { c = parseInt(c, 10); return (isNaN(c) ? 0 : ((c % 4) + 4)) % 4; }
+  function nextMarkColor() {
+    var st = S.settings();
+    if (st.markAlt === false) return normMarkColor(st.markColor);
+    return G.marks.length % MARK_VARS.length;      /* чередование — как в 3.2 */
+  }
+  function setMarkColor(ci) {
+    S.setSetting('markColor', normMarkColor(ci));
+    S.setSetting('markAlt', false);
+    syncMarkUI();
+    sfx('click');
+    toast('ОДИН ЦВЕТ', 'info', 'следующие стрелки и круги — цветом ' + (normMarkColor(ci) + 1) + ' из 4');
+  }
+  function setMarkAlt(on) {
+    S.setSetting('markAlt', !!on);
+    syncMarkUI();
+    sfx('click');
+    if (on) toast('ЧЕРЕДОВАНИЕ ВКЛЮЧЕНО', 'info', 'цвета меток снова сменяются по счёту');
+  }
+  function setMarkPanel(on) {
+    S.setSetting('markPanel', !!on);
+    syncMarkUI();
+    sfx('click');
+    if (on) toast('МИНИ-ПАНЕЛЬ ВКЛЮЧЕНА', 'info', 'справа от доски — быстрый выбор цвета стрелок');
+  }
+  /* меню (удержание), мини-панель и настройки «Цвета» всегда синхронны */
+  function syncMarkUI() {
+    renderMarkPanel();
+    var st = S.settings();
+    var alt = st.markAlt !== false, one = normMarkColor(st.markColor);
+    var ma = $('mmAlt'); if (ma) ma.checked = alt;
+    var sa = $('chkMarkAlt'); if (sa) sa.checked = alt;
+    var mp = $('mmPanel'); if (mp) mp.checked = st.markPanel === true;
+    var sp = $('chkMarkPanel'); if (sp) sp.checked = st.markPanel === true;
+    document.querySelectorAll('.mm-sw').forEach(function (b) {
+      b.classList.toggle('on', !alt && parseInt(b.dataset.c, 10) === one);
+    });
+    document.querySelectorAll('.mp-sw').forEach(function (b) {
+      b.classList.toggle('on', !alt && parseInt(b.dataset.c, 10) === one);
+    });
+    var pa = $('mpAlt'); if (pa) pa.classList.toggle('on', alt);
+  }
+  function renderMarkPanel() {
+    var p = $('markPanel');
+    if (!p) return;
+    var st = S.settings();
+    p.hidden = st.markPanel !== true;
+    if (p.hidden) return;
+    var wrap = $('mpSwatches');
+    if (wrap && !wrap.dataset.built) {
+      wrap.dataset.built = '1';
+      var html = '';
+      for (var i = 0; i < 4; i++) {
+        html += '<button type="button" class="mp-sw" data-c="' + i + '" style="background:' + MARK_STYLE[i] + '" ' +
+          'data-tip="Следующие стрелки и круги — этим цветом (чередование выключится)" ' +
+          'aria-label="Цвет меток ' + (i + 1) + '"></button>';
+      }
+      wrap.innerHTML = html;
+      wrap.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.mp-sw') : null;
+        if (b) setMarkColor(b.dataset.c);
+      });
+    }
+    var ma = $('mpAlt');
+    if (ma && !ma.dataset.bound) {
+      ma.dataset.bound = '1';
+      ma.addEventListener('click', function () { setMarkAlt(!(S.settings().markAlt !== false)); });
+    }
+    var mo = $('mpOff');
+    if (mo && !mo.dataset.bound) {
+      mo.dataset.bound = '1';
+      mo.addEventListener('click', function () { setMarkPanel(false); });
+    }
+  }
   function toggleMark(m) {
     for (var i = 0; i < G.marks.length; i++) {
       var x = G.marks[i];
@@ -269,12 +355,13 @@
         G.marks.splice(i, 1); return;
       }
     }
-    m.color = G.marks.length % MARK_VARS.length;
+    m.color = nextMarkColor();
     G.marks.push(m);
   }
   /* Правая кнопка на доске: короткое нажатие — круг, тяга к другой клетке —
      стрелка (как раньше), а удержание на одной клетке дольше MARK_HOLD_MS —
-     окно «цвет того, что рисуем» (3.2). Таймер снимается, как только курсор
+     меню «Стрелки и метки» (3.3): цвет следующей метки, чередование,
+     расширенный режим с мини-панелью. Таймер снимается, как только курсор
      уходит на другую клетку или за пределы доски: началась стрелка. */
   function startMarkDrag(e, sq) {
     endMarkDrag();
@@ -320,7 +407,7 @@
     if (d.holdTimer) { clearTimeout(d.holdTimer); d.holdTimer = null; }
     clearHoldRing();
     endMarkDrag();          /* снимаем слушатели: отпускание кнопки уже ничего не рисует */
-    openMarksChooser(d.from);
+    openMarkMenu(d.from);
   }
   function onMarkMove(e) {
     if (!markDrag) return;
@@ -335,14 +422,14 @@
     }
     if (markDrag.noDraw) return;
     if (to < 0) to = markDrag.from;
-    renderMarks(markDrag.moved ? { type: 'arrow', from: markDrag.from, to: to, color: G.marks.length % MARK_VARS.length } : null);
+    renderMarks(markDrag.moved ? { type: 'arrow', from: markDrag.from, to: to, color: nextMarkColor() } : null);
   }
   function onMarkUp(e) {
     var d = markDrag;
     if (!d) return;
     var to = sqFromPoint(e.clientX || 0, e.clientY || 0);
     endMarkDrag();
-    if (d.held) return;      /* удержание уже открыло окно цвета — метку не ставим */
+    if (d.held) return;      /* удержание уже открыло меню — метку не ставим */
     if (d.noDraw) return;    /* режим дизайнера: правая кнопка ничего не рисует */
     if (!d.moved || to < 0 || to === d.from) {
       /* правый клик без перетаскивания или внутри одной клетки — круг-пометка */
@@ -606,6 +693,19 @@
   }
 
   function renderEngineTab() {
+    /* 3.3: предустановленный Rodent V — строка видна только когда exe найден в ресурсах */
+    var brow = $('bundledRow');
+    if (brow) {
+      brow.hidden = true;
+      if (P.isDesktop() && typeof P.bundledEnginePath === 'function') {
+        P.bundledEnginePath().then(function (p) {
+          if (!p) return;
+          var bb = $('btnRodentBundled');
+          if (bb) bb.dataset.path = p;
+          brow.hidden = false;
+        }).catch(function () { /* нет предустановки — строка скрыта */ });
+      }
+    }
     var list = $('engineList');
     var st = E.status();
     var html = '';
@@ -689,7 +789,7 @@
     $('btnRodentExe').setAttribute('data-tip', nativeOk
       ? (native ? 'Заново выбрать исполняемый файл Rodent (IV или V) и перезапустить процесс'
         : 'Выбрать исполняемый файл Rodent V или IV и запустить его отдельным процессом')
-      : 'Доступно только в десктоп-версии (Electron/Tauri): в браузере добавьте WASM-сборку');
+      : 'Доступно только в десктоп-версии (Electron): в браузере добавьте WASM-сборку');
     $('rodentHelp').innerHTML = RODENT_HELP;
   }
 
@@ -822,6 +922,11 @@
     'подписка на info и bestmove; перевод хода из нотации UCI (e2e4, e7e8q) в ход на доске; ' +
     'ограничение силы (время на ход, глубина, узлы) и пресеты «Лёгкий / Средний / Сильный»; ' +
     'перезапуск движка при следующем открытии приложения.<br><br>' +
+    '<b>Предустановленный движок (установщик с 3.3)</b>: Rodent V 1.2 уже вложен в приложение — ' +
+    'нажмите «🖥 Использовать предустановленный», и движок запустится процессом; скачивать ничего не ' +
+    'нужно (кнопка появляется, когда exe найден в ресурсах приложения). Движок распространяется ' +
+    'под GPL как отдельная программа, текст лицензии лежит в папке ресурсов. Если кнопки нет ' +
+    '(portable-сборка, браузер) — действуйте по варианту 1.<br><br>' +
     '<b>Вариант 1 — Rodent V (рекомендуем, версия для компьютера)</b><br>' +
     '1. Откройте страницу релизов github.com/nescitus/Rodent-V/releases (кнопка «↗ Rodent V» ниже) ' +
     'и скачайте архив release-1-2.zip (~46 МБ). Движок распространяется под GPL и в наше приложение ' +
@@ -864,7 +969,7 @@
       ? '🖥 Запущено как приложение на компьютере: обёртка <b>' + esc(i.env) + '</b>' +
         (i.appVersion ? ' v' + esc(i.appVersion) : '') +
         '. Файлы сохраняются через системный диалог, внешние ссылки открываются в браузере.'
-      : '🌐 Запущено в браузере. Десктоп-обёртка (Electron/Tauri) находится в папке <b>desktop/</b>: ' +
+      : '🌐 Запущено в браузере. Десктоп-обёртка (Electron) находится в папке <b>desktop/</b>: ' +
         'она открывает этот же index.html и добавляет нативное сохранение файлов, системные уведомления, ' +
         'иконку в трее и запуск внешнего движка отдельным процессом.';
   }
@@ -1750,6 +1855,9 @@
 
   /* ---------- живое обновление раздела ---------- */
   function renderColorsLive() {
+    bindMarkUI();    /* 3.3: блок «Стрелки и метки» — построение и синхронизация */
+    bindStylesUI();  /* 3.3: сохранённые стили — построение и синхронизация */
+    bindDesignUI();  /* 3.3: наборы фигур — построение и синхронизация */
     if (!T) return;
     var t = themeStore();
     document.querySelectorAll('#themeGroups .titem').forEach(function (row) {
@@ -2176,6 +2284,374 @@
     });
   }
 
+  /* ---------- сохранённые стили темы (3.3) ----------
+     Именованные снимки темы в localStorage (chess-styles-v1): сохранить,
+     применить, удалить. Данные и санитизация — в store.js (saveStyle),
+     применение повторяет строгость импорта: недопустимые значения отбрасываются. */
+  function renderStylesList() {
+    var box = $('stylesList');
+    if (!box) return;
+    var list = (S.styles && S.styles()) || [];
+    if (!list.length) {
+      box.innerHTML = '<div class="hint" style="margin:4px 0 8px">Сохранённых стилей пока нет: настройте цвета и нажмите «💾 Сохранить стиль».</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i];
+      var nv = Object.keys(it.theme || {}).length, ns = Object.keys(it.squares || {}).length;
+      html += '<div class="style-row" data-id="' + esc(it.id || '') + '">' +
+        '<span class="style-name" title="' + esc(it.name) + '">' + esc(it.name) + '</span>' +
+        '<span class="style-meta">' + nv + ' цвет.' + (ns ? ' · клеток: ' + ns : '') + '</span>' +
+        '<span class="style-btns">' +
+        '<button type="button" class="btn btn-mini" data-a="apply" data-tip="Применить стиль: цвета сразу появятся на экране">Применить</button>' +
+        '<button type="button" class="btn btn-mini danger" data-a="del" data-tip="Удалить стиль безвозвратно">🗑</button>' +
+        '</span></div>';
+    }
+    box.innerHTML = html;
+  }
+  function applyStyleItem(it) {
+    if (!T || !it) return;
+    var vars = {}, sq = {}, applied = 0, dropped = 0;
+    var src = (it.theme && typeof it.theme === 'object') ? it.theme : {};
+    for (var k in src) {
+      var reg = T.BY_VAR[k];
+      if (reg && T.validValue(src[k]) && (!T.isGradient(src[k]) || reg.g)) { vars[k] = src[k]; applied++; }
+      else dropped++;
+    }
+    var srcSq = (it.squares && typeof it.squares === 'object') ? it.squares : {};
+    for (var ks in srcSq) {
+      if (T.validSquareKey(ks) && T.validValue(srcSq[ks])) { sq[String(Number(ks))] = srcSq[ks]; applied++; }
+      else dropped++;
+    }
+    if (!applied) {
+      toast('В стиле нечего применять', 'info', 'Ни одного допустимого значения' + (dropped ? ' · отброшено: ' + dropped : ''));
+      sfx('no');
+      return;
+    }
+    S.setSetting('theme', vars);
+    S.setSetting('sqColors', sq);
+    S.setSetting('themeAdv', it.adv === true && Object.keys(sq).length > 0);
+    applyThemeNow();
+    renderColorsLive();
+    toast('СТИЛЬ ПРИМЕНЁН', 'arch', '«' + (it.name || 'Стиль') + '»: значений ' + applied + (dropped ? ' · отброшено ' + dropped : ''));
+    sfx('click');
+  }
+  function saveStyleBox() {
+    var t = themeStore();
+    var nVars = Object.keys(t.vars).length, nSq = Object.keys(t.sq).length;
+    if (!nVars && !nSq) {
+      toast('Сохранять пока нечего', 'info', 'Стиль пустой: сначала измените хоть один цвет темы');
+      sfx('no');
+      return null;
+    }
+    var def = 'Стиль ' + (((S.styles && S.styles().length) || 0) + 1);
+    sfx('click');
+    var box = openModal('<h2>Сохранить стиль</h2>' +
+      '<p class="hint" style="margin:2px 0 8px">Именованный снимок текущей темы: ' + nVars + ' цвет.' +
+      (nSq ? ' и ' + nSq + ' клет.' : '') + '. Хранится локально на устройстве — можно применить или удалить в любой момент.</p>' +
+      '<input class="inp" id="styleNameIn" type="text" maxlength="40" value="' + esc(def) + '" aria-label="Название стиля">' +
+      '<div class="btns" style="margin-top:10px"><button class="btn" data-a="cancel">Отмена</button>' +
+      '<button class="btn primary" data-a="save">💾 Сохранить</button></div>');
+    var inp = box.querySelector('#styleNameIn');
+    if (inp) { try { inp.focus(); inp.select(); } catch (e) { /* jsdom */ } }
+    box.querySelector('[data-a=cancel]').addEventListener('click', function () { closeModal(); });
+    var doSave = function () {
+      var name = ((inp && inp.value) || '').trim() || def;
+      var r = S.saveStyle({ name: name, theme: t.vars, squares: t.sq, adv: t.adv });
+      if (!r || !r.ok) {
+        toast('НЕ СОХРАНИЛОСЬ', 'info', r && r.why === 'quota' ? 'Хранилище браузера переполнено — удалите часть стилей'
+          : (r && r.why === 'cap' ? 'Достигнут предел в 100 стилей' : 'Неизвестная ошибка'));
+        sfx('no');
+        return;
+      }
+      closeModal();
+      renderStylesList();
+      toast('СТИЛЬ СОХРАНЁН', 'arch', '«' + r.item.name + '» — в списке «Сохранённые стили»');
+      sfx('click');
+    };
+    box.querySelector('[data-a=save]').addEventListener('click', doSave);
+    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSave(); });
+    return box;
+  }
+  function bindStylesUI() {
+    var bs = $('btnStyleSave');
+    if (bs && !bs.dataset.bound) {
+      bs.dataset.bound = '1';
+      bs.addEventListener('click', saveStyleBox);
+    }
+    var list = $('stylesList');
+    if (list && !list.dataset.bound) {
+      list.dataset.bound = '1';
+      list.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-a]') : null;
+        if (!b) return;
+        var row = b.closest ? b.closest('.style-row') : null;
+        var id = row ? row.dataset.id : '';
+        if (b.dataset.a === 'apply') {
+          var items = (S.styles && S.styles()) || [];
+          for (var i = 0; i < items.length; i++) if (items[i].id === id) { applyStyleItem(items[i]); break; }
+        } else if (b.dataset.a === 'del') {
+          var nm = row && row.querySelector('.style-name') ? row.querySelector('.style-name').textContent : '';
+          confirmBox('Удалить стиль?', 'Стиль «' + esc(nm) + '» будет удалён безвозвратно.', 'Удалить', true, function (yes) {
+            if (!yes) return;
+            if (S.deleteStyle(id)) { renderStylesList(); toast('СТИЛЬ УДАЛЁН', 'info', ''); sfx('click'); }
+          });
+        }
+      });
+    }
+    renderStylesList();
+  }
+
+  /* ---------- 3.3: наборы фигур ----------
+     Встроенные наборы вшивает build.js (группы символов pc-<set>-<фигура> в том же
+     спрайте); свои наборы загружаются пользователем (12 SVG) и хранятся через
+     Platform.putFile в IndexedDB (в браузере без IDB — память вкладки). pieceHTML()
+     выбирает группу по настройке pieceSet и откатывается на Cburnett, если набора нет. */
+  var PIECE_SETS = [
+    { id: 'cburnett', n: 'Cburnett (классика)' },
+    { id: 'dots', n: 'Точки — одинаковые у чёрных и белых' },
+    { id: 'rings', n: 'Кольца' },
+    { id: 'ghost', n: 'Прозрачные (контур)' },
+    { id: 'glass', n: 'Полупрозрачные' },
+    { id: 'unicode', n: 'Символы Unicode' },
+    { id: 'unicodeo', n: 'Символы Unicode, контур' },
+    { id: 'letters', n: 'Буквы' },
+    { id: 'geo', n: 'Геометрия' },
+    { id: 'geoo', n: 'Геометрия, контур' },
+    { id: 'mini', n: 'Мини-точки' },
+    { id: 'bars', n: 'Планки' }
+  ];
+  var PIECE_FILE_KEYS = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'];
+  var userSetsCache = [];
+
+  function pieceSetById(id) {
+    for (var i = 0; i < PIECE_SETS.length; i++) if (PIECE_SETS[i].id === id) return PIECE_SETS[i];
+    for (var j = 0; j < userSetsCache.length; j++) if (userSetsCache[j].id === id) return { id: id, n: userSetsCache[j].name };
+    return null;
+  }
+  function pieceSetId() {
+    var s = S.settings().pieceSet;
+    if (typeof s !== 'string' || !s) return 'cburnett';
+    if (s === 'cburnett' || pieceSetById(s)) return s;
+    return 'cburnett';
+  }
+  function applyPieceSet(id) {
+    S.setSetting('pieceSet', id);
+    builtFlipped = null;   /* клетки пересоберутся: <use> фигур создаются заново */
+    buildPieceSetGrid();
+    renderUserSetsList();
+    render();
+    var s = pieceSetById(id);
+    toast('НАБОР ФИГУР', 'arch', s ? s.n : id);
+    sfx('click');
+  }
+  function buildPieceSetGrid() {
+    var grid = $('pieceSetGrid');
+    if (!grid) return;
+    var cur = pieceSetId();
+    var all = PIECE_SETS.concat(userSetsCache.map(function (u) { return { id: u.id, n: u.name }; }));
+    var html = '';
+    for (var i = 0; i < all.length; i++) {
+      var s = all[i];
+      var pre = s.id === 'cburnett' ? 'pc-' : 'pc-' + s.id + '-';
+      html += '<button type="button" class="set-card' + (cur === s.id ? ' on' : '') + '" data-set="' + esc(s.id) + '" ' +
+        'data-tip="Набор фигур: ' + esc(s.n) + '">' +
+        '<span class="set-prev">' +
+        '<svg viewBox="0 0 45 45" aria-hidden="true"><use href="#' + pre + 'wQ"/></svg>' +
+        '<svg viewBox="0 0 45 45" aria-hidden="true"><use href="#' + pre + 'bK"/></svg>' +
+        '</span><span class="st-n">' + esc(s.n) + '</span></button>';
+    }
+    grid.innerHTML = html;
+  }
+  function userSpriteRoot() {
+    var el = document.getElementById('userPieceSprite');
+    if (!el) {
+      el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      el.id = 'userPieceSprite';
+      el.setAttribute('width', '0');
+      el.setAttribute('height', '0');
+      el.setAttribute('aria-hidden', 'true');
+      el.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function injectUserSet(rec) {
+    if (!rec || !rec.id || !rec.files) return 0;
+    var root = userSpriteRoot(), n = 0;
+    PIECE_FILE_KEYS.forEach(function (key) {
+      var raw = String(rec.files[key] || '');
+      if (!/<svg/i.test(raw)) return;
+      var m = raw.match(/viewBox\s*=\s*"([^"]+)"/i);
+      var vb = m ? m[1] : '0 0 45 45';
+      var inner = raw.replace(/^\uFEFF/, '').replace(/^[\s\S]*?<svg[^>]*>/i, '').replace(/<\/svg>\s*$/i, '');
+      var id = 'pc-' + rec.id + '-' + key;
+      var old = document.getElementById(id);
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      try {
+        var parsed = new DOMParser().parseFromString(
+          '<svg xmlns="http://www.w3.org/2000/svg"><symbol id="' + id + '" viewBox="' + vb + '">' + inner + '</symbol></svg>',
+          'image/svg+xml');
+        var sym = parsed.documentElement.firstChild;
+        if (sym) { root.appendChild(document.importNode(sym, true)); n++; }
+      } catch (e) { /* битый SVG — пропускаем фигуру */ }
+    });
+    return n;
+  }
+  function loadUserPieceSets() {
+    if (!P || typeof P.getFile !== 'function') return Promise.resolve([]);
+    return P.getFile('piece-sets-index').then(function (idx) {
+      if (!Array.isArray(idx)) idx = [];
+      return Promise.all(idx.map(function (meta) {
+        return meta && meta.id ? P.getFile('piece-set-' + meta.id).then(function (rec) {
+          return (rec && rec.files) ? rec : null;
+        }) : Promise.resolve(null);
+      }));
+    }).then(function (recs) {
+      userSetsCache = [];
+      recs.forEach(function (r) { if (r) { userSetsCache.push(r); injectUserSet(r); } });
+      return userSetsCache;
+    }).catch(function () { return []; });
+  }
+  function readTextFile(f) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result || '')); };
+      fr.onerror = function () { reject(new Error('не прочитался ' + f.name)); };
+      fr.readAsText(f);
+    });
+  }
+  function validatePieceFiles(list) {
+    var files = Array.prototype.slice.call(list || []);
+    var byName = {}, errs = [];
+    files.forEach(function (f) {
+      var nm = String(f.name || '');
+      var low = nm.toLowerCase();
+      if (low.slice(-4) !== '.svg') { errs.push(nm + ': нужен файл .svg'); return; }
+      var base = low.slice(0, -4);
+      var canon = null;
+      for (var i = 0; i < PIECE_FILE_KEYS.length; i++) {
+        if (PIECE_FILE_KEYS[i].toLowerCase() === base) { canon = PIECE_FILE_KEYS[i]; break; }
+      }
+      if (!canon) { errs.push(nm + ': имя вне списка (wK…bP)'); return; }
+      if (typeof f.size === 'number' && f.size > 65536) { errs.push(nm + ': больше 64 КБ'); return; }
+      byName[canon] = f;
+    });
+    PIECE_FILE_KEYS.forEach(function (k) { if (!byName[k]) errs.push('не хватает ' + k + '.svg'); });
+    if (errs.length) return Promise.resolve({ ok: false, errors: errs });
+    return Promise.all(PIECE_FILE_KEYS.map(function (k) {
+      return readTextFile(byName[k]).then(function (t) {
+        if (!/<svg/i.test(t)) throw new Error(k + '.svg: это не SVG-файл');
+        return [k, t];
+      });
+    })).then(function (pairs) {
+      var out = {};
+      pairs.forEach(function (pr) { out[pr[0]] = pr[1]; });
+      return { ok: true, files: out };
+    }).catch(function (e) { return { ok: false, errors: [e.message] }; });
+  }
+  function onPieceFilesPicked(input) {
+    var list = input && input.files ? input.files : [];
+    if (!list.length) return;
+    validatePieceFiles(list).then(function (res) {
+      try { input.value = ''; } catch (e) { /* jsdom */ }
+      if (!res.ok) {
+        toast('НАБОР НЕ СОБРАН', 'check', res.errors.slice(0, 3).join('; ') + (res.errors.length > 3 ? '; …' : ''));
+        sfx('no');
+        return;
+      }
+      var id = 'user-' + Date.now().toString(36);
+      var rec = { id: id, name: 'Мой набор ' + (userSetsCache.length + 1), files: res.files, ts: Date.now() };
+      var idx = userSetsCache.map(function (u) { return { id: u.id, name: u.name, ts: u.ts }; });
+      idx.push({ id: rec.id, name: rec.name, ts: rec.ts });
+      Promise.all([P.putFile('piece-set-' + id, rec), P.putFile('piece-sets-index', idx)]).then(function () {
+        userSetsCache.push(rec);
+        injectUserSet(rec);
+        applyPieceSet(id);
+        toast('НАБОР ЗАГРУЖЕН', 'arch', rec.name + ' · 12 файлов · хранится локально, никуда не отправляется');
+      });
+    });
+  }
+  function deleteUserPieceSet(id) {
+    var idx = [];
+    for (var i = 0; i < userSetsCache.length; i++) {
+      var u = userSetsCache[i];
+      if (u.id !== id) idx.push({ id: u.id, name: u.name, ts: u.ts });
+    }
+    Promise.all([P.delFile('piece-set-' + id), P.putFile('piece-sets-index', idx)]).then(function () {
+      userSetsCache = userSetsCache.filter(function (u) { return u.id !== id; });
+      var root = document.getElementById('userPieceSprite');
+      if (root) {
+        Array.prototype.slice.call(root.querySelectorAll('symbol')).forEach(function (sy) {
+          if (sy.id.indexOf('pc-' + id + '-') === 0 && sy.parentNode) sy.parentNode.removeChild(sy);
+        });
+      }
+      if (S.settings().pieceSet === id) S.setSetting('pieceSet', 'cburnett');
+      builtFlipped = null;   /* пересборка клеток после снятия символов */
+      buildPieceSetGrid();
+      renderUserSetsList();
+      render();
+      toast('НАБОР УДАЛЁН', 'info', '');
+      sfx('click');
+    });
+  }
+  function renderUserSetsList() {
+    var box = $('userSetsList');
+    if (!box) return;
+    if (!userSetsCache.length) { box.innerHTML = ''; return; }
+    var html = '';
+    for (var i = 0; i < userSetsCache.length; i++) {
+      var u = userSetsCache[i];
+      html += '<div class="style-row" data-uset="' + esc(u.id) + '">' +
+        '<span class="style-name">' + esc(u.name) + '</span>' +
+        '<span class="style-meta">12 SVG · локально</span>' +
+        '<span class="style-btns">' +
+        '<button type="button" class="btn btn-mini" data-a="use" data-tip="Сделать этот набор активным">Применить</button>' +
+        '<button type="button" class="btn btn-mini danger" data-a="del" data-tip="Удалить набор с устройства">🗑</button>' +
+        '</span></div>';
+    }
+    box.innerHTML = html;
+  }
+  function bindDesignUI() {
+    var grid = $('pieceSetGrid');
+    if (grid && !grid.dataset.bound) {
+      grid.dataset.bound = '1';
+      grid.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-set]') : null;
+        if (b) applyPieceSet(b.dataset.set);
+      });
+    }
+    var bu = $('btnPieceUpload'), fi = $('pieceFiles');
+    if (bu && !bu.dataset.bound) {
+      bu.dataset.bound = '1';
+      bu.addEventListener('click', function () { if (fi) fi.click(); });
+    }
+    if (fi && !fi.dataset.bound) {
+      fi.dataset.bound = '1';
+      fi.addEventListener('change', function () { onPieceFilesPicked(fi); });
+    }
+    var ul = $('userSetsList');
+    if (ul && !ul.dataset.bound) {
+      ul.dataset.bound = '1';
+      ul.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-a]') : null;
+        if (!b) return;
+        var row = b.closest ? b.closest('[data-uset]') : null;
+        var id = row ? row.dataset.uset : '';
+        if (!id) return;
+        if (b.dataset.a === 'use') { applyPieceSet(id); return; }
+        if (b.dataset.a === 'del') {
+          var meta = pieceSetById(id) || { n: '' };
+          confirmBox('Удалить набор?', 'Загруженный набор фигур «' + esc(meta.n || id) + '» будет удалён с устройства.',
+            'Удалить', true, function (yes) { if (yes) deleteUserPieceSet(id); });
+        }
+      });
+    }
+    buildPieceSetGrid();
+    renderUserSetsList();
+  }
+
   /* ---------- привязка кнопок раздела ---------- */
   function bindThemeUI() {
     if (!T) return;
@@ -2255,7 +2731,7 @@
        • левый Shift+клик — обычное действие элемента (переход по вкладке,
          кнопка): клик не перехватывается, рамка подсветки становится синей;
        • правая кнопка проходит на доску: её удержание на одной клетке (≈0,5 с)
-         открывает окно цвета стрелок и меток — и в режиме дизайнера тоже
+         открывает меню «Стрелки и метки» — и в режиме дизайнера тоже
          (метки при этом не рисуются, флаг noDraw в startMarkDrag);
        • Esc — выход в любом месте (если открыта пипетка, первый Esc закрывает
          её и откатывает цвет, второй — выводит из режима);
@@ -2447,13 +2923,23 @@
     return box;
   }
 
-  /* ---------- окно цвета меток (3.2) ----------
+  /* ---------- меню «Стрелки и метки» (3.3; заменяет окно цвета меток 3.2) ----------
      Открывается удержанием правой кнопки мыши на одной клетке доски дольше
-     0.5 с: предлагает перекрасить то, что рисует правая кнопка, — круги и
-     стрелки разбора. Их четыре цвета чередуются по счёту меток; если на этой
-     клетке уже есть метка, её цвет предлагается первым. */
-  function openMarksChooser(sq) {
-    if (!T) return null;
+     ~0,5 с: каким цветом рисовать следующие метки — одним (клик по образцу)
+     или чередующимися (галочка), плюс «расширенный режим» — мини-панель
+     справа от доски. Если на клетке уже есть метка, её цвет предлагается
+     первым. Сами четыре цвета настраиваются пипетками в
+     «⚙ Настройки → Цвета → Доска и клетки» («Стрелки и метки — цвет 1…4»). */
+  function markSwatchesHTML(cls, order, st) {
+    var alt = st.markAlt !== false, one = normMarkColor(st.markColor);
+    return order.map(function (ci) {
+      return '<button type="button" class="' + cls + (!alt && ci === one ? ' on' : '') + '" data-c="' + ci + '" ' +
+        'style="background:' + MARK_STYLE[ci] + '" aria-label="Цвет меток ' + (ci + 1) + '" ' +
+        'data-tip="Рисовать следующие метки этим цветом (чередование выключится)"></button>';
+    }).join('');
+  }
+  function openMarkMenu(sq) {
+    var st = S.settings();
     var own = -1;
     for (var i = 0; i < G.marks.length; i++) {
       var x = G.marks[i];
@@ -2461,29 +2947,55 @@
     }
     var order = [0, 1, 2, 3];
     if (own >= 0) order = [own].concat(order.filter(function (c) { return c !== own; }));
-    var vars = order.map(function (ci) {
-      var it = T.BY_VAR[MARK_VARS[ci]] || {};
-      return {
-        v: MARK_VARS[ci], n: it.n || MARK_VARS[ci], group: 'Доска и клетки',
-        label: ci === own
-          ? 'цвет метки на этой клетке'
-          : (ci === 0 ? 'следующая метка, если стёрто всё' : 'чередуется по счёту меток')
-      };
-    });
     sfx('click');
-    var box = openDesignerChooser({
-      vars: vars,
-      title: 'Цвет стрелок и меток',
-      text: 'Правая кнопка рисует на доске круги и стрелки — их цвета чередуются по счёту. ' +
-        'Выберите, какой перекрасить: откроется та же пипетка, что и в настройках. ' +
-        'Это окно открывается удержанием правой кнопки на одной клетке (≈0,5 с).'
+    var box = openModal(
+      '<h2>Стрелки и метки</h2>' +
+      '<p class="hint" style="margin:2px 0 8px">Каким цветом рисовать следующие стрелки и круги правой кнопки. ' +
+      (own >= 0 ? 'Цвет метки на этой клетке предлагается первым. ' : '') +
+      'Сами четыре цвета настраиваются в «⚙ Настройки → Цвета → Доска и клетки».</p>' +
+      '<div class="mm-swatches">' + markSwatchesHTML('mm-sw', order, st) + '</div>' +
+      '<label class="chk"><input type="checkbox" id="mmAlt"' + (st.markAlt !== false ? ' checked' : '') +
+      '> Чередовать четыре цвета (по счёту меток)</label>' +
+      '<label class="chk"><input type="checkbox" id="mmPanel"' + (st.markPanel === true ? ' checked' : '') +
+      '> Расширенный режим: мини-панель цвета справа от доски</label>' +
+      '<div class="btns"><button class="btn primary" data-a="close">Готово</button></div>');
+    box.addEventListener('click', function (e) {
+      if (!e.target.closest) return;
+      var b = e.target.closest('.mm-sw');
+      if (b) { setMarkColor(b.dataset.c); return; }
+      if (e.target.closest('[data-a=close]')) closeModal();
     });
+    box.querySelector('#mmAlt').addEventListener('change', function () { setMarkAlt(this.checked); });
+    box.querySelector('#mmPanel').addEventListener('change', function () { setMarkPanel(this.checked); });
     /* кнопку отпускают уже над окном: на Windows в этот момент стреляет
        contextmenu — не отдаём его браузеру */
     if (box && box.parentNode) {
       box.parentNode.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
     }
     return box;
+  }
+  /* дубль в настройках → «Цвета»: те же образцы и две галочки (3.3) */
+  function bindMarkUI() {
+    var wrap = $('markSwatchesSet');
+    if (wrap && !wrap.dataset.built) {
+      wrap.dataset.built = '1';
+      wrap.innerHTML = markSwatchesHTML('mm-sw', [0, 1, 2, 3], S.settings());
+      wrap.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.mm-sw') : null;
+        if (b) setMarkColor(b.dataset.c);
+      });
+    }
+    var ca = $('chkMarkAlt');
+    if (ca && !ca.dataset.bound) {
+      ca.dataset.bound = '1';
+      ca.addEventListener('change', function () { setMarkAlt(ca.checked); });
+    }
+    var cp = $('chkMarkPanel');
+    if (cp && !cp.dataset.bound) {
+      cp.dataset.bound = '1';
+      cp.addEventListener('change', function () { setMarkPanel(cp.checked); });
+    }
+    syncMarkUI();
   }
 
   /* сброс элемента под курсором: убираем его переопределения из темы */
@@ -2557,8 +3069,8 @@
     document.addEventListener('pointerover', function (e) { if (designerActive()) designerHover(e); }, true);
     document.addEventListener('pointerdown', function (e) {
       if (!designerActive() || designerExempt(e.target) || isNavEvent(e)) return;
-      /* правую кнопку пропускаем на доску: её удержание открывает окно цвета
-         меток и в режиме дизайнера (startMarkDrag ставит флаг noDraw) */
+      /* правую кнопку пропускаем на доску: её удержание открывает меню
+         «Стрелки и метки» и в режиме дизайнера (startMarkDrag ставит флаг noDraw) */
       if (e.button === 2) return;
       e.stopPropagation();
     }, true);
@@ -2630,6 +3142,7 @@
   }
 
   var CHANGELOG = [
+    ['3.3', 'Стрелки, стили, наборы фигур и предустановленный движок. Удержание правой кнопки на клетке (~0,5 с) теперь открывает меню «Стрелки и метки»: клик по образцу рисует следующие метки ОДНИМ цветом (чередование выключается), галочка возвращает чередование четырёх цветов, а «расширенный режим» добавляет справа от доски мини-панель быстрого выбора цвета — она стоит рядом с доской, не перекрывает её и доступна прямо во время игры; те же переключатели дублируются в «⚙ Настройки → Цвета». Там же — «Сохранённые стили»: именованный снимок темы (цвета интерфейса, доски и точечная раскраска клеток) хранится локально, применяется в один клик и удаляется с подтверждением (до 100 стилей). Новая подкатегория «Дизайн»: 12 встроенных наборов фигур — классический Cburnett, «одинаковые точки» у чёрных и белых, кольца, прозрачные (контур), полупрозрачные, символы Unicode (залитые и контурные), буквы, геометрия (залитая и контурная), мини-точки и планки — все перекрашиваются темой (группа «Фигуры»); свой набор загружается дюжиной SVG-файлов (wK…bP.svg, до 64 КБ каждый) и хранится на устройстве (IndexedDB), никуда не отправляясь. Rodent V 1.2 предустановлен в установщик (GPL, как отдельная программа; текст лицензии — в ресурсах): в «⚙ → Движок» появилась кнопка «🖥 Использовать предустановленный» — скачивать архив больше не нужно, ручной путь (release-1-2.zip целиком в одну папку → «Выбрать exe…») сохранён. Каркас Tauri удалён из проекта: поддержка остановилась на 3.2, единственная десктоп-платформа — Electron. Разработчикам: новый набор тестов uitest16, упаковщик файлов tools/pack.js с pack-for-ai.bat, исправлен баг require(/tmp/...) в uitest.js.'],
     ['3.2', 'Цвета фигур и стрелок, удержание правой кнопки, Rodent V. В теме появились две новые группы: «Фигуры» (заливка и контур белых, заливка, контур и светлые детали чёрных) и четыре цвета стрелок разбора в группе «Доска и клетки» — всего 81 настраиваемый элемент в шести группах. Фигуры перекрашиваются целиком: спрайт собирается с var(--pc-*), значения по умолчанию равны цветам Cburnett, поэтому классический вид не меняется. Цвет стрелок и кругов правой кнопки теперь тоже живёт в теме и применяется мгновенно. Новый способ добраться до цвета: удерживайте правую кнопку мыши на одной клетке доски дольше ~0,5 секунды (золотое кольцо покажет, что удержание засчитано) — откроется окно «Цвет стрелок и меток», где цвет метки на этой клетке предлагается первым; короткое нажатие и тяга к другой клетке работают как раньше (круг и стрелка), а уход курсора на другую клетку отменяет удержание. В режиме дизайнера клетка с фигурой предлагает и её цвета, а золотая подсветка переменной обводит сами фигуры или клетки с метками нужного цвета. Исправлено: HEX-поле в пипетке растягивалось на всю строку и вылезало за правый край окна (правило input.inp{width:100%} перебивало .cp-hex) — теперь поле фиксированной ширины, а подсказка рядом обрезается многоточием. Rodent V (2026, Go + NNUE, ~3400 CCRL Elo, GPL) проверен живым рукопожатием: приложение читает id name/id author и показывает, как движок представился, разбирает его настоящие опции (Hash, Clear Hash, UCI_Chess960, UCI_LimitStrength, UCI_Elo 800…3000, OwnBook, Threads, MultiPV, PersonalityFile) и водит протокол в прежнем порядке; пресеты силы работают командой go, поэтому подходят и IV, и V. Карточка движка переименована в «Rodent IV / V», добавлена кнопка «↗ Rodent V» на страницу релизов, справка переписана под оба поколения и объясняет, что архив распаковывается на диск целиком, а в приложение указывается один исполняемый файл (соседние папки personalities/nets/books движок читает сам — рабочая папка процесса равна папке exe; в обёртке Tauri рабочая папка теперь выставляется так же, как в Electron). Браузер больше не принимает архивы движка с внятным сообщением: нужен один файл .wasm/.js.'],
     ['3.1', 'Режим дизайнера: цвета теперь меняются кликом по самому интерфейсу. В настройках (⚙) → «Цвета» появилась кнопка «🖌 Режим дизайнера»: окно настроек закрывается, под курсором возникает рамка с названием цветов, которые формируют элемент, а клик открывает список «что именно перекрасить» и пипетку HSL. Карту «элемент → цвет» приложение строит разбором собственного CSS, поэтому она не разъезжается со стилями и покрывает все 72 элемента; при открытии пипетки все элементы, которые красит эта переменная, на полторы секунды обводятся золотом, а фон пипетки и окно настроек становятся полупрозрачными — изменение видно вживую, а не на затемнённом фоне; обычные действия (вкладки, кнопки, ходы) остаются доступны с зажатым левым Shift, выход — Esc в любом месте, а кнопка «↺ Сбросить элемент» убирает переопределения у элемента под курсором. Внизу окна настроек добавлена кнопка «⏻ Выход»: в версии для компьютера она закрывает приложение (в полноэкранном режиме у окна нет ни заголовка, ни крестика), гасит процесс движка и сохраняет партию; в браузере кнопка скрыта. Rodent IV: JS-обвязка Web Worker вшита в единый файл, поэтому WASM-сборку можно добавить и без интернета; исполняемый файл в десктопе теперь считается установленным (кнопки «Использовать», «Проверить», «Удалить» работают), путь запоминается и движок сам поднимается при следующем открытии приложения; список опций читается из рукопожатия UCI — настоящие имена, типы, пределы, галочки, списки «личностей» и кнопки; команды протокола идут в правильном порядке (setoption → ucinewgame → position → go, причём ucinewgame посылается один раз на партию), а при сбое запуска приложение честно возвращается к встроенному боту и пишет причину в журнал UCI. Заодно исправлено: выбранный движок и путь к его файлу терялись при перезапуске (настройки собирались по белому списку ключей), а смена уровня «Лёгкий/Средний/Сильный» не доходила до внешнего движка — теперь уровень применяется как пресет UCI и не затирает настроенные вручную параметры. Справка дополнена разделами о цветах и выходе; подготовлен задел под настройку цвета фигур (переменные --pc-* и сборочный флаг PIECE_THEME — включим в 3.2 после проверки в браузере).'],
     ['1.0', 'Первая версия: игра за обе стороны на одной доске, сброс, полные правила (рокировка, взятие на проходе, превращение), отдельные объявления шаха, мата, пата и всех ничьих, запись партии, компьютер-соперник.'],
@@ -2643,7 +3156,7 @@
     ['2.3.1', 'Автообновление в десктопе заработало: electron-updater теперь попадает в сборку, источник обновлений — GitHub (naemnik6/Chess), все этапы проверки пишутся в лог и видны в DevTools, при запуске приложение само проверяет обновления в фоне; вместо «не настроено» показывается конкретная ошибка с диагностикой и кнопка «Скачать обновление вручную» (страница релизов GitHub). Исправлено: «О программе» не открывалась в десктопе (падала на проценте квоты безлимита), короткий левый клик по пустой клетке не стирал стрелки.'],
     ['2.4', 'Меню приложения «⋮» пересобрано в полноценное окно настроек с категориями: Вид, Архив, Движок, Журнал, Справка и О программе — переход кликом по категории или обычной прокруткой, ползунок окна стилизован под дизайн приложения. Вкладки «Журнал» и «Движок» переехали из бокового меню в настройки; «Перевернуть доску» осталось во вкладке «Ходы»; дубли кнопок (новая партия, вернуть ход, сохранение, выгрузка, стрелки, FEN/PGN, Lichess) убраны — они уже есть в основном меню. Подсказки кнопок переведены в один верхний слой с переносом текста: больше не появляются горизонтальные ползунки и описания не прячутся под вкладки. Напоминание о выгрузке архива можно отключить (настройки → «Архив»). Ошибка проверки обновлений больше не вываливает простыню HTTP-заголовков: короткое сообщение, полный текст — в раскрывающемся блоке «Технические подробности».'],
     ['3.0', 'Дизайнерское обновление: полная настройка цветов. В окне настроек (⚙) появилась категория «Цвета»: 72 элемента интерфейса и доски в пяти раскрывающихся группах — фон и панели, текст и акценты, кнопки и ползунки, доска (клетки, рамка, координаты, подсветки хода, шаха и взятия, тень фигур), а также подсказки, диалог превращения, кнопка Lichess, логотип, плашка просмотра истории и шкала квоты архива. У каждого элемента — HSL-пипетка с готовой палитрой из 36 образцов, HEX-полем, прозрачностью и двухцветными градиентами с настройкой угла; раздел доступен и с клавиатуры (Tab, Enter). Семь готовых палитр: Классика, Лёд, Изумруд, Сепия, Виолет, Багрянец, Графит. Точечная раскраска отдельных клеток a1…h8 с привязкой к полям доски — в расширенном режиме (по умолчанию выключен). Экспорт и импорт темы в JSON с отбрасыванием недопустимых значений, сброс отдельного элемента и всей темы; изменения применяются мгновенно с живым предпросмотром, «Отмена» и Esc возвращают прежний цвет. Обёртка Tauri доведена до собираемого состояния: Cargo.toml, build.rs, capabilities, мост window.Chesster, отдельная папка dist для фронтенда; оценка и план переноса — в TAURI.md.'],
-    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере; перенос десктоп-обёртки на Tauri (оценка готовности — в TAURI.md); передача аргументов командной строки внешнему движку (режим alloptions у Rodent V).'],
+    ['план', 'Лаунчер версий (выбор установленных версий, список изменений, новости) — оценён, ждёт своего часа; NNUE-движок в браузере; передача аргументов командной строки внешнему движку (режим alloptions у Rodent V).'],
   ];
   function showChangelog() { openSettings('help'); }
   function showAbout() { openSettings('about'); }
@@ -3228,7 +3741,7 @@
     '<li><b>Недостаточно материала</b> — мат невозможен в принципе.</li>' +
     '<li><b>По соглашению</b> — кнопка ½ под доской.</li>' +
     '<li><b>Сдача</b> — кнопка ⚑ под доской: поражение стороны, чей ход.</li></ul>' +
-    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка. Пометок может быть несколько, цвета чередуются. Повторная стрелка между теми же клетками удаляется. Движение внутри одной клетки рисует круг, короткий правый клик ставит круг на клетке. <b>Удерживайте правую кнопку на одной клетке дольше ~0,5 секунды</b> — откроется окно «Цвет стрелок и меток»: четыре чередующихся цвета настраиваются пипеткой, цвет метки на этой клетке предлагается первым (кольцо на клетке показывает, что удержание засчитано). <b>Короткий левый клик</b> по доске или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
+    '<h3>Стрелки и пометки</h3><p>Зажмите <b>правую кнопку мыши</b> и протяните от клетки к клетке — нарисуется стрелка; короткий правый клик ставит круг. По умолчанию четыре цвета <b>чередуются</b> по счёту меток. <b>Удерживайте правую кнопку на одной клетке дольше ~0,5 секунды</b> (золотое кольцо) — откроется меню <b>«Стрелки и метки»</b>: клик по образцу выбирает <b>один цвет</b> для последующих меток (чередование выключается), галочки возвращают <b>чередование</b> и включают <b>расширенный режим</b> — мини-панель быстрого выбора цвета справа от доски. Те же переключатели дублируются в «⚙ Настройки → Цвета». Сами четыре цвета настраиваются пипеткой в «Настройки → Цвета → Доска и клетки». Повторная стрелка между теми же клетками удаляется; <b>короткий левый клик</b> или сделанный ход стирают все пометки (то же делает кнопка ➶).</p>' +
     '<h3>Архив партий</h3><p>После завершения партии предлагается сохранить её в архив: можно задать название и имена игроков. Сохранённую партию можно воспроизвести на доске, посмотреть её PGN, переименовать или удалить. Имена складываются в профили: сыграно, победы, ничьи, поражения, процент очков, маты, сдачи, личные встречи.</p>' +
     '<h3>Пустое имя = аноним</h3><p>Если имя не указано, партия сохраняется как анонимная. Все анонимы попадают в один сводный профиль «Аноним» (в таблице он последний, с пометкой). Если без имени играли обе стороны, партия учитывается один раз, но победы и поражения не разделяются — их некому приписать. Галочка «Учитывать партии без имени (анонимные) в статистике» в настройках (⚙ → «Архив») разрешает или запрещает такой учёт, а кнопка «Очистить анонима» на вкладке «Профили» обнуляет сводный профиль, не трогая партии в архиве.</p>' +
     '<h3>Выгрузка архива</h3><p>Чтобы браузер не хранил лишнего, архив можно выгрузить одним PGN-файлом и очистить: кнопка «📦 Выгрузить всё и очистить архив». Статистика профилей при этом сохраняется (галочку можно снять). Напоминание о выгрузке приходит каждые N партий — число настраивается в настройках (⚙ → «Архив»), там же напоминания можно отключить.</p>' +
@@ -3889,6 +4402,28 @@
     $('btnRodentRepo').onclick = function () { openRodentUrl('repo'); };
     var bv = $('btnRodentV');
     if (bv) bv.onclick = function () { openRodentUrl('vrel'); };
+    var bbtn = $('btnRodentBundled');
+    if (bbtn) bbtn.onclick = function () {
+      var p = bbtn.dataset.path;
+      if (!p) return;
+      pushEngineLog('запуск предустановленного движка: ' + p);
+      E.startNative(p).then(function (r) {
+        pushEngineLog('движок запущен: ' + JSON.stringify(r));
+        S.setSettings({ engine: 'rodent4', engineExe: p });
+        E.newGame();
+        var idn = E.engineIdentity('rodent4');
+        var nm = (idn && idn.name) ? idn.name : 'Rodent V';
+        addLog('<b>' + esc(nm) + ' (предустановленный) запущен как процесс</b>.', 'arch');
+        toast(nm.toUpperCase() + ' ЗАПУЩЕН', 'arch', 'предустановленный движок · нативный процесс');
+        sfx('save');
+        render();
+      }).catch(function (err) {
+        pushEngineLog('ошибка запуска предустановленного движка: ' + err.message);
+        toast('ДВИЖОК НЕ ЗАПУСТИЛСЯ', 'check', err.message);
+        sfx('no');
+        renderEngineTab();
+      });
+    };
     $('btnRodentUse').onclick = useRodent;
     $('btnRodentTest').onclick = function () { testEngine('rodent4'); };
     $('btnRodentDel').onclick = function () { deleteEngine('rodent4'); };
@@ -4063,6 +4598,8 @@
     bindUpdaterEvents();
     bind();
     applyThemeNow();      /* сохранённая цветовая тема — до первой отрисовки */
+    renderMarkPanel();    /* 3.3: мини-панель цвета меток, если включён расширенный режим */
+    loadUserPieceSets().then(function () { builtFlipped = null; render(); });  /* 3.3: загруженные наборы фигур */
     bindThemeUI();
     bindDesigner();       /* режим дизайнера: перехват клика и рамка подсветки */
     var restored = restore();
@@ -4109,10 +4646,17 @@
     applyThemeNow: applyThemeNow, openColorPicker: openColorPicker, applyPreset: applyPreset,
     renderColorsLive: renderColorsLive, buildThemeUI: buildThemeUI, exportTheme: exportTheme,
     importTheme: importTheme, themeStore: themeStore, flashThemeTargets: flashThemeTargets,
+    renderStylesList: renderStylesList, saveStyleBox: saveStyleBox, applyStyleItem: applyStyleItem,
+    PIECE_SETS: PIECE_SETS, PIECE_FILE_KEYS: PIECE_FILE_KEYS, pieceSetId: pieceSetId,
+    applyPieceSet: applyPieceSet, validatePieceFiles: validatePieceFiles,
+    loadUserPieceSets: loadUserPieceSets, buildPieceSetGrid: buildPieceSetGrid,
+    userSets: function () { return userSetsCache.slice(); },
     /* режим дизайнера (3.1): красим интерфейс кликом по нему */
     startDesigner: startDesigner, stopDesigner: stopDesigner, designerActive: designerActive,
-    /* цвет меток и удержание правой кнопки (3.2) */
-    openMarksChooser: openMarksChooser, markStyle: markStyle, MARK_VARS: MARK_VARS,
+    /* цвет меток и удержание правой кнопки (3.2–3.3: меню, один цвет, мини-панель) */
+    openMarkMenu: openMarkMenu, markStyle: markStyle, MARK_VARS: MARK_VARS, MARK_STYLE: MARK_STYLE,
+    nextMarkColor: nextMarkColor, setMarkColor: setMarkColor, setMarkAlt: setMarkAlt,
+    setMarkPanel: setMarkPanel, syncMarkUI: syncMarkUI, renderMarkPanel: renderMarkPanel,
     MARK_HOLD_MS: MARK_HOLD_MS, rodentDisplayName: rodentDisplayName,
     restoreEngineChoice: restoreEngineChoice, RODENT_URLS: RODENT_URLS,
     designerFor: designerFor, resetDesignerElement: resetDesignerElement, quitApp: quitApp,

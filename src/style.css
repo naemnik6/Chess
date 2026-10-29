@@ -757,3 +757,47 @@ body .flash-var{outline:3px solid var(--gold);outline-offset:1px;
 body.picker-open .set-win.open{opacity:.2;pointer-events:none}
 body.picker-open .set-bg.on{opacity:.15}
 .modal-bg.see-through{background:rgba(5,7,16,.28)}
+
+/* ---------- 3.3: цвет стрелок и меток — меню, настройки, мини-панель ---------- */
+.board-area{position:relative}
+/* Панель — элемент раскладки СПРАВА ОТ ДОСКИ (не перекрывает её и не мешает игре).
+   На узких экранах, где справа нет места,降级 до компактного оверлея у правого края
+   (z-index 40 — ниже выдвижного меню 140, настроек 180 и модальных окон 200:
+   любое меню открывается поверх панели). */
+.mark-panel{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:center;
+  padding:9px 7px;border-radius:13px;background:var(--panel-grad);border:1px solid var(--line);
+  box-shadow:0 14px 30px rgba(0,0,0,.45);max-height:min(72vh,620px);overflow-y:auto}
+@media (max-width:1100px){
+  .mark-panel{position:absolute;right:3px;top:50%;transform:translateY(-50%);z-index:40}
+}
+.mark-panel[hidden]{display:none}
+.mp-title{font-size:10.5px;color:var(--muted);letter-spacing:.03em}
+.mp-swatches{display:flex;flex-direction:column;gap:7px}
+.mp-sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--line-hi);cursor:pointer;padding:0}
+.mp-sw.on{outline:2px solid var(--accent);outline-offset:2px}
+.mp-alt{white-space:nowrap}
+.mp-alt.on{border-color:var(--accent);color:var(--accent)}
+.mp-off{opacity:.8}
+.mm-swatches{display:flex;gap:10px;margin:6px 0 10px;flex-wrap:wrap}
+.mm-sw{width:46px;height:32px;border-radius:9px;border:2px solid var(--line-hi);cursor:pointer;padding:0}
+.mm-sw.on{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:560px){.mark-panel{padding:6px 4px;gap:5px}.mp-sw{width:22px;height:22px}}
+
+/* ---------- 3.3: сохранённые стили темы ---------- */
+.style-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);
+  border-radius:9px;margin:5px 0;background:var(--card-bg,rgba(255,255,255,.02))}
+.style-name{font-weight:600;font-size:12.5px;flex:0 1 auto;max-width:45%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.style-meta{font-size:11px;color:var(--muted);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.style-btns{display:flex;gap:6px;flex:0 0 auto}
+
+/* ---------- 3.3: дизайн — наборы фигур ---------- */
+.set-grid{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+.set-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 6px 6px;width:92px;
+  border:1px solid var(--line);border-radius:10px;background:var(--card-bg,transparent);cursor:pointer;
+  color:var(--text-soft)}
+.set-card:hover{border-color:var(--line-hi)}
+.set-card.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.set-prev{display:flex;gap:4px;align-items:center;justify-content:center}
+.set-prev svg{width:28px;height:28px}
+.set-card span.st-n{font-size:10px;line-height:1.2;text-align:center}

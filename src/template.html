@@ -72,6 +72,17 @@
         <button class="btn btn-mini" id="btnClosePlayback">Вернуться к своей партии</button>
       </div>
       </div>
+
+      <!-- 3.3: мини-панель цвета стрелок (расширенный режим; включается
+           в меню по удержанию правой кнопки или в настройках → «Цвета») -->
+      <aside class="mark-panel" id="markPanel" hidden aria-label="Цвет следующих стрелок и меток">
+        <div class="mp-title">Цвет меток</div>
+        <div class="mp-swatches" id="mpSwatches"></div>
+        <button type="button" class="btn btn-mini mp-alt" id="mpAlt"
+          data-tip="Чередовать четыре цвета по счёту меток (как в 3.2)">⇄ Чередование</button>
+        <button type="button" class="btn btn-mini mp-off" id="mpOff"
+          data-tip="Скрыть мини-панель (вернуть: ⚙ → «Цвета» или удержание правой кнопки)">✕</button>
+      </aside>
     </section>
 
   </main>
@@ -290,6 +301,24 @@
           <button class="btn btn-mini" id="btnThemeExport" data-tip="Показать тему в виде JSON-текста: его можно сохранить и перенести на другое устройство">⧉ Экспорт</button>
           <button class="btn btn-mini" id="btnThemeImport" data-tip="Вставить JSON ранее экспортированной темы">⬆ Импорт</button>
         </div>
+        <div class="lbl" style="margin-top:12px">Сохранённые стили</div>
+        <div class="set-actions">
+          <button class="btn btn-mini" id="btnStyleSave" data-tip="Запомнить текущие цвета и точечную раскраску под своим именем: хранится локально, можно применить или удалить">💾 Сохранить стиль</button>
+        </div>
+        <div id="stylesList"></div>
+        <div class="hint">Стиль — именованный снимок темы (цвета интерфейса, доски и клеток).
+          Хранится локально на устройстве и не заменяет готовые палитры.</div>
+        <div class="lbl" style="margin-top:14px">Дизайн — набор фигур</div>
+        <div class="set-grid" id="pieceSetGrid"></div>
+        <div class="set-actions" style="margin-top:6px">
+          <button class="btn btn-mini" id="btnPieceUpload" data-tip="Загрузить свой набор: выберите сразу 12 файлов SVG с именами wK.svg, wQ.svg, wR.svg, wB.svg, wN.svg, wP.svg, bK.svg, bQ.svg, bR.svg, bB.svg, bN.svg, bP.svg">⬆ Загрузить свой набор (SVG)</button>
+          <input type="file" id="pieceFiles" accept=".svg,image/svg+xml" multiple hidden aria-label="Файлы набора фигур">
+        </div>
+        <div id="userSetsList"></div>
+        <div class="hint">Набор меняет вид фигур на доске, во взятых и в диалоге превращения.
+          Встроенные наборы перекрашиваются темой (группа «Фигуры» выше); загруженные показываются
+          в своих цветах. Свои наборы хранятся локально (IndexedDB) и никуда не отправляются.
+          Требования: 12 файлов с именами wK…bP.svg, каждый до 64 КБ, viewBox желательно 0 0 45 45.</div>
         <div class="lbl" style="margin-top:12px">Элементы интерфейса и доски</div>
         <div id="themeGroups"></div>
         <label class="chk"><input type="checkbox" id="chkThemeAdv"> Точечная раскраска отдельных клеток (расширенный режим)</label>
@@ -311,6 +340,15 @@
             </div>
           </div>
           <div class="hint">Кликните клетку, чтобы изменить её цвет. Клетки с собственным цветом помечены золотой точкой.</div>
+        </div>
+        <div class="lbl" style="margin-top:14px">Стрелки и метки (правая кнопка)</div>
+        <div class="mm-swatches" id="markSwatchesSet"></div>
+        <label class="chk"><input type="checkbox" id="chkMarkAlt"> Чередовать четыре цвета (по счёту меток)</label>
+        <label class="chk"><input type="checkbox" id="chkMarkPanel"> Расширенный режим: мини-панель цвета справа от доски</label>
+        <div class="hint">
+          Клик по образцу — последующие стрелки и круги рисуются одним этим цветом (чередование
+          выключается). То же меню открывается удержанием правой кнопки на клетке доски (~0,5 с).
+          Сами четыре цвета настраиваются выше, в группе «Доска и клетки» («Стрелки и метки — цвет 1…4»).
         </div>
       </section>
 
@@ -354,6 +392,10 @@
           <button class="btn btn-mini" id="btnRodentUse" data-tip="Сделать Rodent активным движком компьютера">▶ Использовать</button>
           <button class="btn btn-mini" id="btnRodentTest" data-tip="Запустить движок и проверить, что он отвечает на UCI">🔌 Проверить</button>
           <button class="btn btn-mini danger" id="btnRodentDel" data-tip="Удалить файл движка из хранилища">🗑 Удалить</button>
+        </div>
+        <div class="row" id="bundledRow" hidden style="gap:8px;margin-top:8px;align-items:center">
+          <span class="hint">Rodent V предустановлен вместе с приложением (GPL; текст лицензии — в ресурсах).</span>
+          <button class="btn btn-mini" id="btnRodentBundled" data-tip="Запустить исполняемый файл Rodent V, который установщик положил в ресурсы приложения">🖥 Использовать предустановленный</button>
         </div>
         <div class="set-actions" style="margin-top:10px">
           <button class="btn btn-mini" id="btnRodentV" data-tip="Открыть релизы Rodent V на GitHub: архив release-1-2.zip с exe, нейросетями, книгами и «личностями»">↗ Rodent V (релизы)</button>

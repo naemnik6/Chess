@@ -1,7 +1,7 @@
 /* Тесты версии 3.0: цветовая тема — реестр элементов, HSL-пипетка с палитрой,
    HEX, прозрачностью и градиентами, готовые палитры, точечная раскраска
    клеток (расширенный режим), экспорт/импорт, sanация значений, persist в
-   localStorage, релиз-файлы 3.0 и собираемый каркас Tauri. */
+   localStorage и релиз-файлы 3.0. Каркас Tauri удалён из проекта — проверки сняты. */
 const fs = require('fs');
 const path = require('path');
 const ROOT = __dirname;
@@ -395,59 +395,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     'запись 3.0 описывает цвета, пипетку, градиенты и Tauri');
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   ok(readme.includes(V), 'README упоминает текущую версию ' + V);
-  ok(fs.existsSync(path.join(ROOT, 'TAURI.md')), 'TAURI.md на месте');
 
-  console.log('\n— 3.0: каркас Tauri собираемый —');
-  const tdir = path.join(ROOT, 'desktop/tauri');
-  const cargo = fs.readFileSync(path.join(tdir, 'Cargo.toml'), 'utf8');
-  ok(cargo.includes('tauri = { version = "2"') && cargo.includes('tauri-plugin-dialog') && cargo.includes('tauri-build'),
-    'Cargo.toml: tauri 2, плагин диалогов, tauri-build');
-  ok(cargo.includes('version = "' + PV + '"'), 'версия крейта синхронна: ' + PV);
-  ok(fs.readFileSync(path.join(tdir, 'build.rs'), 'utf8').includes('tauri_build::build()'), 'build.rs на месте');
-  const caps = JSON.parse(fs.readFileSync(path.join(tdir, 'capabilities/default.json'), 'utf8'));
-  ok(caps.permissions.includes('core:default') && caps.windows.includes('main'), 'capabilities: core:default для окна main');
-  const conf = JSON.parse(fs.readFileSync(path.join(tdir, 'tauri.conf.json'), 'utf8'));
-  ok(conf.version === PV, 'tauri.conf.json: версия ' + PV);
-  ok(/^node \.\.\/\.\.\/build\.js/.test(conf.build.beforeBuildCommand),
-    'beforeBuildCommand запускает корневой build.js: ' + conf.build.beforeBuildCommand);
-  ok(conf.build.frontendDist === './dist', 'frontendDist — отдельная папка dist (в бинарник не попадает весь репозиторий)');
-  const distHtml = path.join(tdir, 'dist/index.html');
-  ok(fs.existsSync(distHtml) && fs.readFileSync(distHtml, 'utf8') === html,
-    'build.js кладёт свежий index.html в desktop/tauri/dist');
-  ok(!fs.existsSync(path.join(tdir, 'dist/sw.js')), 'сервис-воркер в dist не копируется: в обёртке офлайн-кэш не нужен');
-  const tgi = fs.readFileSync(path.join(tdir, '.gitignore'), 'utf8');
-  ok(tgi.includes('/target/'), '.gitignore Tauri не пускает в git папку target (гигабайты артефактов)');
-  ok(conf.build.devUrl === undefined, 'devUrl убран — dev грузит собранный фронтенд');
-  ok(conf.app.security.csp.includes('ipc: http://ipc.localhost'), 'в CSP разрешён IPC WebView2');
-  ok(conf.app.withGlobalTauri === true, 'withGlobalTauri включён (мосту нужен window.__TAURI__)');
-  const bridge = fs.readFileSync(path.join(tdir, 'bridge.js'), 'utf8');
-  ok(bridge.includes('window.Chesster') && bridge.includes("platform: 'tauri'"), 'bridge.js определяет window.Chesster как tauri');
-  ok(['openExternal', 'saveFile', 'pickEngine', 'spawnEngine', 'engineWrite', 'engineKill',
-    'onEngineLine', 'setFullscreen', 'isFullscreen', 'checkUpdates', 'onMenu'].every(k => bridge.includes(k + ':')),
-    'мост повторяет API preload.js Electron');
-  ok(!/archiveRead\s*:/.test(bridge), 'архив-файл в мосту осознанно не включён (синхронного IPC в Tauri нет)');
-  const mainrs = fs.readFileSync(path.join(tdir, 'src/main.rs'), 'utf8');
-  ok(mainrs.includes('initialization_script') && mainrs.includes('include_str!("../bridge.js")'),
-    'main.rs внедряет мост до загрузки страницы');
-  ok(mainrs.includes('pick_engine') && mainrs.includes('save_file, open_external, pick_engine, engine_spawn, engine_write, engine_kill, quit_app'),
-    'команды pick_engine и quit_app зарегистрированы в invoke_handler');
-  ok(mainrs.includes('CREATE_NO_WINDOW'), 'движок под Windows запускается без консольного окна');
-  const asyncCmds = (mainrs.match(/#\[tauri::command\(async\)\]/g) || []).length;
-  ok(asyncCmds === 7, 'все семь команд помечены (async): диалоги не блокируют главный поток окна');
-  ok(mainrs.includes('fn save_file(app: AppHandle, name: String, data: String)'),
-    'save_file принимает текст: вложенные Uint8Array JSON-транспорт Tauri не переносит');
-  ok(mainrs.includes('RunEvent::Exit') && mainrs.includes('kill_engine'),
-    'при выходе приложение глушит процесс движка (как Electron)');
-  ok(mainrs.includes('rundll32') && !mainrs.includes('Command::new("cmd")'),
-    'ссылки открываются через rundll32, а не через cmd (адрес не разбивается по &)');
-  ok(!cargo.includes('tauri-plugin-shell'), 'неиспользуемый плагин shell убран из зависимостей');
-  ok(!caps.permissions.includes('dialog:default'), 'разрешение dialog не выдаётся JS: диалоги вызываются из Rust');
-  ok(bridge.includes('function toText(') && !/data:\s*bytes/.test(bridge), 'мост приводит данные файла к тексту UTF-8');
-  const tauriMd = fs.readFileSync(path.join(ROOT, 'TAURI.md'), 'utf8');
-  ok(/Этап 1/.test(tauriMd) && /Этап 2/.test(tauriMd) && /Этап 3/.test(tauriMd), 'в TAURI.md план по этапам');
-  const twf = fs.readFileSync(path.join(ROOT, '.github/workflows/tauri.yml'), 'utf8');
-  ok(twf.includes('workflow_dispatch') && !/^\s*tags:/m.test(twf) && !/^push:/m.test(twf), 'workflow Tauri — только ручной запуск (релизы не трогает)');
-  ok(twf.includes('tauri-apps/tauri-action') && twf.includes('projectPath: desktop/tauri'), 'workflow собирает через tauri-action');
 
   console.log('\nИТОГ: ' + pass + ' проверок, ' + fail + ' провалов');
   process.exit(fail ? 1 : 0);

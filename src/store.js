@@ -17,7 +17,8 @@
     game: 'chess-game-v1',
     archive: 'chess-archive-v1',
     players: 'chess-players-v1',
-    log: 'chess-log-v1'
+    log: 'chess-log-v1',
+    styles: 'chess-styles-v1'
   };
   var LOG_CAP = 500;
   var ANON = '@anon';
@@ -68,12 +69,18 @@
     engine: 'builtin', engineExe: null,
     /* цветовая тема (3.0): переопределения CSS-переменных, точечные цвета
        клеток (ключи "0".."63") и флаг расширенного режима раскраски */
-    theme: {}, sqColors: {}, themeAdv: false
+    theme: {}, sqColors: {}, themeAdv: false,
+    /* стрелки и метки (3.3): markAlt — чередование четырёх цветов (по умолчанию
+       включено, поведение 3.2), markColor — цвет одиночного режима (0..3),
+       markPanel — «расширенный режим»: мини-панель выбора цвета справа от доски */
+    markAlt: true, markColor: 0, markPanel: false,
+    /* набор фигур (3.3): 'cburnett', id встроенного набора или 'user-*' */
+    pieceSet: 'cburnett'
   };
 
   var set = {};
 
-  var archiveData, playersData, logData, gameData;
+  var archiveData, playersData, logData, gameData, stylesData;
   /* ---------- архив файлом на устройстве (десктоп) ----------
      Обёртка предоставляет синхронный мост archiveRead/archiveWrite: архив
      хранится обычным файлом в userData, без браузерных квот localStorage. */
@@ -107,6 +114,12 @@
     logData = load(KEYS.log, []);
     if (!Array.isArray(logData)) logData = [];
     gameData = load(KEYS.game, null);
+    stylesData = load(KEYS.styles, []);
+    if (!Array.isArray(stylesData)) stylesData = [];
+    /* страховка от повреждённых записей: только объекты с именем */
+    stylesData = stylesData.filter(function (it) {
+      return it && typeof it === 'object' && typeof it.name === 'string';
+    });
     var s2 = load(KEYS.settings, null) || {};
     for (var key in DEFAULT_SETTINGS) {
       set[key] = s2[key] !== undefined ? s2[key] : DEFAULT_SETTINGS[key];
@@ -115,6 +128,12 @@
     if (!set.theme || typeof set.theme !== 'object' || Array.isArray(set.theme)) set.theme = {};
     if (!set.sqColors || typeof set.sqColors !== 'object' || Array.isArray(set.sqColors)) set.sqColors = {};
     set.themeAdv = set.themeAdv === true;
+    set.markAlt = set.markAlt !== false;
+    set.markColor = (typeof set.markColor === 'number' && isFinite(set.markColor))
+      ? ((Math.floor(set.markColor) % 4) + 4) % 4 : 0;
+    set.markPanel = set.markPanel === true;
+    set.pieceSet = (typeof set.pieceSet === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(set.pieceSet))
+      ? set.pieceSet : 'cburnett';
   }
   reloadBlocks();
 
@@ -540,9 +559,50 @@
     return out;
   }
 
+  /* ---------- сохранённые стили темы (3.3) ----------
+     Именованные снимки темы (цвета + точечная раскраска) в localStorage
+     (chess-styles-v1) — отдельно от архива и настроек. saveStyle() sanitизирует
+     имя и состав и при переполнении квоты возвращает {ok:false, why:'quota'},
+     не портя список. Лимит STYLE_CAP — здравый смысл против раздувания. */
+  var STYLE_CAP = 100;
+  function styles() { return stylesData.slice(); }
+  function persistStyles() {
+    mem[KEYS.styles] = JSON.stringify(stylesData);
+    var l = ls();
+    if (!l) return true;               /* режим без localStorage — считаем сохранённым */
+    try { l.setItem(KEYS.styles, mem[KEYS.styles]); return true; }
+    catch (e) { return false; }        /* переполнение квоты */
+  }
+  function saveStyle(entry) {
+    if (!entry || typeof entry !== 'object') return { ok: false, why: 'bad' };
+    if (stylesData.length >= STYLE_CAP) return { ok: false, why: 'cap' };
+    var item = {
+      id: 'st' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: (String(entry.name || '').trim().slice(0, 40)) || ('Стиль ' + (stylesData.length + 1)),
+      theme: (entry.theme && typeof entry.theme === 'object' && !Array.isArray(entry.theme)) ? entry.theme : {},
+      squares: (entry.squares && typeof entry.squares === 'object' && !Array.isArray(entry.squares)) ? entry.squares : {},
+      adv: entry.adv === true,
+      ts: Date.now()
+    };
+    stylesData.push(item);
+    if (!persistStyles()) { stylesData.pop(); return { ok: false, why: 'quota' }; }
+    return { ok: true, item: item };
+  }
+  function deleteStyle(id) {
+    for (var i = 0; i < stylesData.length; i++) {
+      if (stylesData[i] && stylesData[i].id === id) {
+        stylesData.splice(i, 1);
+        persistStyles();
+        return true;
+      }
+    }
+    return false;
+  }
+
   return {
     KEYS: KEYS, ANON: ANON, LOG_CAP: LOG_CAP,
     settings: settings, setSetting: setSetting, setSettings: setSettings,
+    styles: styles, saveStyle: saveStyle, deleteStyle: deleteStyle,
     game: game, setGame: setGame, clearGame: clearGame,
     archive: archive, countGames: countGames, archiveBytes: archiveBytes,
     sizeLabel: sizeLabel, usageLabel: usageLabel, nextAutoTitle: nextAutoTitle, stamp: stamp,

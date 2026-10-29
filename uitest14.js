@@ -23,7 +23,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { c ? (pass++, console.log('  OK   ' + m)) : (fail++, console.log('  FAIL ' + m)); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-/* ---------- имитация моста обёртки (Electron/Tauri) ----------
+/* ---------- имитация моста обёртки (Electron) ----------
    «Движок» отвечает на uci списком настоящих опций, на isready — readyok,
    на go — строкой info и bestmove. Все полученные строки пишутся в log.lines,
    чтобы можно было проверить порядок команд протокола. */
@@ -648,10 +648,6 @@ function boot(withBridge) {
   ok(sw.indexOf('chesster-' + V + '-') >= 0, 'кэш сервис-воркера получил версию ' + V);
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
   ok(pkg.version === PV, 'desktop/package.json: ' + pkg.version);
-  const cargo = fs.readFileSync(path.join(ROOT, 'desktop/tauri/Cargo.toml'), 'utf8');
-  const tconf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/tauri/tauri.conf.json'), 'utf8'));
-  ok(cargo.indexOf('version = "' + PV + '"') >= 0, 'Cargo.toml: ' + PV);
-  ok(tconf.version === PV, 'tauri.conf.json: ' + tconf.version);
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
   ok(bat.indexOf('git tag v' + PV) >= 0, 'push-release.bat ставит тег v' + PV);
   ok(bat.indexOf('git commit -m "Release ' + V + ':') >= 0, 'сообщение коммита обновлено до ' + V);
@@ -663,16 +659,16 @@ function boot(withBridge) {
   ok(/engineChild\.kill\(\)/.test(mainjs.split("ipcMain.handle('app:quit'")[1].slice(0, 600)),
     'перед выходом Electron гасит процесс движка');
   ok(/quitApp: \(\) => ipcRenderer\.invoke\('app:quit'\)/.test(preload), 'preload.js отдаёт странице quitApp');
-  const mainrs = fs.readFileSync(path.join(ROOT, 'desktop/tauri/src/main.rs'), 'utf8');
-  ok(/fn quit_app\(app: AppHandle, state: State<EngineState>\)/.test(mainrs), 'в Tauri есть команда quit_app');
-  ok(/app\.exit\(0\)/.test(mainrs), 'quit_app завершает процесс Tauri');
-  ok(/engine_kill, quit_app/.test(mainrs), 'quit_app зарегистрирована в invoke_handler');
-  const bridge = fs.readFileSync(path.join(ROOT, 'desktop/tauri/bridge.js'), 'utf8');
-  ok(/quitApp: function/.test(bridge) && /invoke\('quit_app'\)/.test(bridge), 'мост Tauri exposes quitApp');
 
   console.log('\n— 3.2: документация и история изменений —');
-  ok(App.CHANGELOG[0][0] === '3.2', 'история изменений начинается с 3.2');
-  const ch32 = App.CHANGELOG[0][1];
+  ok(App.CHANGELOG[0][0] === '3.3', 'история изменений начинается с 3.3');
+  const ch33 = App.CHANGELOG[0][1];
+  ok(/стрелк|метк/i.test(ch33), 'в записи 3.3 описаны стрелки и метки');
+  ok(/стил/i.test(ch33), 'в записи 3.3 описаны сохранённые стили');
+  ok(/набор/i.test(ch33), 'в записи 3.3 описаны наборы фигур');
+  ok(/Rodent|движ/i.test(ch33), 'в записи 3.3 описан предустановленный движок');
+  ok(/Tauri/i.test(ch33), 'в записи 3.3 отмечено удаление каркаса Tauri');
+  const ch32 = App.CHANGELOG.filter(x => x[0] === '3.2')[0][1];
   ok(/фигур/i.test(ch32) && /81/.test(ch32), 'в записи 3.2 описаны цвета фигур и новый счётчик элементов');
   ok(/удержив/i.test(ch32) && /0,5/.test(ch32), 'в записи 3.2 описано удержание правой кнопки');
   ok(/HEX/i.test(ch32), 'в записи 3.2 упомянуто исправление HEX-поля');
@@ -682,19 +678,14 @@ function boot(withBridge) {
     'в записи 3.1 описан режим дизайнера с Shift и Esc');
   ok(/выход/i.test(ch31), 'в записи 3.1 упомянута кнопка выхода из приложения');
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  ok(/3\.2/.test(readme), 'README обновлён до версии 3.2');
+  ok(/3\.3/.test(readme), 'README обновлён до версии 3.3');
   ok(/[Рр]ежим дизайнера/.test(readme), 'в README описан режим дизайнера');
   ok(/Rodent V/.test(readme) && /удерж/i.test(readme), 'в README есть Rodent V и удержание правой кнопки');
   ok(/фигур/i.test(readme), 'в README описан цвет фигур');
   const dReadme = fs.readFileSync(path.join(ROOT, 'desktop/README.md'), 'utf8');
   ok(/app:quit|quitApp|Выход/.test(dReadme), 'в desktop/README описан выход из приложения');
-  const tauriMd = fs.readFileSync(path.join(ROOT, 'TAURI.md'), 'utf8');
-  ok(/quit_app/.test(tauriMd), 'в TAURI.md упомянута команда quit_app');
 
   console.log('\n— 3.1: сборка и целостность файла —');
-  const distIndex = path.join(ROOT, 'desktop/tauri/dist/index.html');
-  ok(fs.existsSync(distIndex) && fs.readFileSync(distIndex, 'utf8') === html,
-    'desktop/tauri/dist/index.html совпадает с собранным index.html');
   const open = (html.match(/<div/g) || []).length, close = (html.match(/<\/div>/g) || []).length;
   ok(open === close, 'div-элементы сбалансированы: ' + open + '/' + close);
   const cssBlock = html.slice(html.indexOf('<style>') + 7, html.indexOf('</style>'));

@@ -1,7 +1,7 @@
 /* Тесты версии 3.2:
      • HEX-поле пипетки: специальность правила, строка hexrow, живое окно;
      • цвета стрелок и меток в теме (--mark-1…4), SVG меток через var();
-     • удержание правой кнопки на одной клетке (~0,5 с) → окно «Цвет стрелок
+     • удержание правой кнопки на одной клетке (~0,5 с) → меню «Стрелки и метки» (3.3), окно «Цвет стрелок
        и меток»: короткое нажатие и тяга работают как раньше, уход на другую
        клетку отменяет удержание, в режиме дизайнера удержание тоже работает,
        а метки не рисуются;
@@ -137,8 +137,9 @@ function boot(withBridge) {
     'переменные меток объявлены в :root');
   ok(T.groupName('--mark-1') === 'Доска и клетки', 'цвета меток — в группе «Доска и клетки»');
   ok(App.MARK_HOLD_MS === 500, 'порог удержания правой кнопки — 500 мс');
-  ok(typeof App.openMarksChooser === 'function' && typeof App.markStyle === 'function',
-    'приложение отдаёт окно цвета меток и резолвер цвета');
+  ok(typeof App.openMarkMenu === 'function' && typeof App.markStyle === 'function' &&
+    typeof App.nextMarkColor === 'function' && typeof App.syncMarkUI === 'function',
+    'приложение отдаёт меню меток (3.3), резолвер цвета и nextMarkColor');
   ok(App.markStyle(0) === 'var(--mark-1,#3aa0ff)' && App.markStyle(5) === 'var(--mark-2,#ffb02e)',
     'markStyle возвращает var() со значением по умолчанию и циклит по модулю 4');
 
@@ -170,32 +171,114 @@ function boot(withBridge) {
     'наконечник стрелки залит цветом темы');
   clearM();
 
-  /* ============================ 3. УДЕРЖАНИЕ ПРАВОЙ КНОПКИ ============================ */
-  console.log('\n— 3.2: удержание правой кнопки на одной клетке —');
+  /* ============================ 3. УДЕРЖАНИЕ ПРАВОЙ КНОПКИ (3.3: МЕНЮ) ============================ */
+  console.log('\n— 3.3: удержание правой кнопки на одной клетке —');
   pev('pointerdown', bsq('d4'), 350, 450, 2);
   await wait(60);
   ok(bsq('d4').classList.contains('hold-ring'), 'на клетке появилось золотое кольцо удержания');
   await wait(620);
-  ok(App.G.modal !== null && q('.modal h2') && q('.modal h2').textContent.indexOf('Цвет стрелок и меток') >= 0,
-    'удержание ~0,5 с открыло окно «Цвет стрелок и меток»: ' + (q('.modal h2') ? q('.modal h2').textContent : '—'));
-  const rows = qa('.dpick-row');
-  ok(rows.length === 4, 'в окне четыре цвета меток: ' + rows.length);
-  ok(rows[0].querySelector('.dpick-n b').textContent.indexOf('Стрелки и метки — цвет 1') >= 0,
-    'без меток на клетке первым идёт цвет 1: ' + rows[0].querySelector('.dpick-n b').textContent);
+  ok(App.G.modal !== null && q('.modal h2') && q('.modal h2').textContent.indexOf('Стрелки и метки') >= 0,
+    'удержание ~0,5 с открыло меню «Стрелки и метки»: ' + (q('.modal h2') ? q('.modal h2').textContent : '—'));
+  const sws = qa('.modal .mm-sw');
+  ok(sws.length === 4, 'в меню четыре цвета: ' + sws.length);
+  ok(sws[0].dataset.c === '0', 'без меток на клетке первым идёт цвет 1: ' + sws.map(b => b.dataset.c).join(','));
+  ok(q('#mmAlt') && q('#mmAlt').checked, 'чередование включено по умолчанию (поведение 3.2)');
+  ok(q('#mmPanel') && !q('#mmPanel').checked, 'расширенный режим по умолчанию выключен');
+  ok(q('#markPanel') && q('#markPanel').hidden, 'мини-панель справа от доски скрыта');
   ok(marks().length === 0, 'удержание не нарисовало круг — меток нет');
   ok(!bsq('d4').classList.contains('hold-ring'), 'кольцо удержания погашено');
   /* отпускание правой кнопки над окном не должно показывать меню браузера */
   const bg = q('.modal-bg');
   const cm = new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
   bg.dispatchEvent(cm);
-  ok(cm.defaultPrevented, 'contextmenu над окном подавлен (кнопку отпускают уже над ним)');
-  rows[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  ok(cm.defaultPrevented, 'contextmenu над меню подавлен (кнопку отпускают уже над ним)');
+  /* клик по образцу — один цвет, чередование выключается */
+  sws[2].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await wait(30);
-  ok(q('#cpH') !== null && q('.modal h2').textContent.indexOf('Стрелки и метки — цвет 2') >= 0,
-    'клик по строке открыл пипетку выбранного цвета: ' + q('.modal h2').textContent);
-  doc.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+  ok(S.settings().markAlt === false && S.settings().markColor === 2,
+    'клик по образцу: один цвет 3, чередование выключено');
+  ok(!q('#mmAlt').checked && qa('.modal .mm-sw.on').length === 1 && q('.modal .mm-sw.on').dataset.c === '2',
+    'меню обновилось: галочка чередования снята, выбранный цвет подсвечен');
+  /* расширенный режим — мини-панель справа от доски */
+  const mp = q('#mmPanel');
+  mp.checked = true;
+  mp.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await wait(20);
+  ok(!q('#markPanel').hidden, 'расширенный режим включён: мини-панель появилась');
+  ok(qa('#mpSwatches .mp-sw').length === 4, 'в мини-панели четыре образца цвета');
+  ok(qa('#mpSwatches .mp-sw.on').length === 1 && q('#mpSwatches .mp-sw.on').dataset.c === '2',
+    'мини-панель подсвечивает текущий одиночный цвет');
+  q('.modal [data-a=close]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+  ok(App.G.modal === null, '«Готово» закрывает меню');
+  /* метки рисуются одним выбранным цветом */
+  pev('pointerdown', bsq('d4'), 350, 450, 2);
+  pev('pointerup', win, 350, 450, 2);
+  await wait(20);
+  pev('pointerdown', bsq('e5'), 450, 350, 2);
+  pev('pointerup', win, 450, 350, 2);
+  await wait(20);
+  ok(marks().length === 2 && marks()[0].color === 2 && marks()[1].color === 2,
+    'один цвет: обе метки цвета 3 (' + marks().map(m => m.color).join(',') + ')');
+  clearM();
+  /* мини-панель: «чередование» возвращает смену цветов */
+  q('#mpAlt').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+  ok(S.settings().markAlt === true && q('#mpAlt').classList.contains('on'),
+    'кнопка «⇄ Чередование» на панели вернула смену цветов');
+  pev('pointerdown', bsq('a1'), 50, 750, 2);
+  pev('pointerup', win, 50, 750, 2);
+  await wait(20);
+  pev('pointerdown', bsq('d4'), 350, 450, 2);
+  pev('pointerup', win, 350, 450, 2);
+  await wait(20);
+  ok(marks().length === 2 && marks()[0].color !== marks()[1].color,
+    'при чередовании метки снова разных цветов');
+  clearM();
+  /* образец на панели — снова один цвет */
+  qa('#mpSwatches .mp-sw')[3].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+  ok(S.settings().markAlt === false && S.settings().markColor === 3,
+    'образец мини-панели: один цвет 4, чередование выключено');
+  /* «✕» скрывает панель (расширенный режим выключается) */
+  q('#mpOff').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+  ok(q('#markPanel').hidden && S.settings().markPanel === false,
+    '«✕» скрывает мини-панель и выключает расширенный режим');
+  /* дубль в настройках → «Цвета» */
+  App.openSettings('colors');
+  await wait(40);
+  ok(q('#chkMarkAlt') && q('#chkMarkAlt').checked === false,
+    'настройки «Цвета»: галочка чередования снята (синхронно с меню)');
+  ok(q('#chkMarkPanel') && q('#chkMarkPanel').checked === false,
+    'настройки «Цвета»: галочка расширенного режима');
+  ok(qa('#markSwatchesSet .mm-sw').length === 4 && q('#markSwatchesSet .mm-sw.on').dataset.c === '3',
+    'настройки «Цвета»: четыре образца, текущий подсвечен');
+  qa('#markSwatchesSet .mm-sw')[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+  ok(S.settings().markColor === 0 && S.settings().markAlt === false,
+    'клик по образцу в настройках: один цвет 1');
+  const ca = q('#chkMarkAlt');
+  ca.checked = true;
+  ca.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await wait(20);
+  ok(S.settings().markAlt === true, 'галочка в настройках вернула чередование');
+  const cpn = q('#chkMarkPanel');
+  cpn.checked = true;
+  cpn.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await wait(20);
+  ok(S.settings().markPanel === true && !q('#markPanel').hidden,
+    'галочка в настройках включила мини-панель справа от доски');
+  q('#mpOff').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await wait(20);
+  App.closeSettings();
   await wait(30);
-  ok(App.G.modal === null, 'Esc закрыл пипетку');
+  /* настройки меток переживают перезагрузку (localStorage) */
+  S.setSetting('markAlt', false);
+  S.setSetting('markColor', 1);
+  const rawSet = JSON.parse(win.localStorage.getItem('chess-settings-v1'));
+  ok(rawSet.markAlt === false && rawSet.markColor === 1 && rawSet.markPanel === false,
+    'настройки меток лежат в chess-settings-v1');
 
   console.log('\n— 3.2: уход на другую клетку отменяет удержание —');
   pev('pointerdown', bsq('e2'), 450, 650, 2);
@@ -207,7 +290,8 @@ function boot(withBridge) {
   ok(marks().length === 1 && marks()[0].type === 'arrow', 'вместо окна нарисовалась обычная стрелка');
   clearM();
 
-  console.log('\n— 3.2: цвет метки на клетке предлагается первым —');
+  console.log('\n— 3.3: цвет метки на клетке предлагается первым —');
+  S.setSetting('markAlt', true); S.setSetting('markColor', 0); App.syncMarkUI();
   pev('pointerdown', bsq('a1'), 50, 750, 2);
   pev('pointerup', win, 50, 750, 2);
   await wait(20);                            /* метка цвета 1 на a1 */
@@ -217,13 +301,14 @@ function boot(withBridge) {
   ok(marks().length === 2 && marks()[1].color === 1, 'две метки с чередующимися цветами');
   pev('pointerdown', bsq('d4'), 350, 450, 2);
   await wait(620);
-  const rows2 = qa('.dpick-row');
-  ok(rows2.length === 4 && rows2[0].querySelector('.dpick-n b').textContent.indexOf('цвет 2') >= 0,
-    'на клетке с меткой первым предложен её цвет: ' + rows2[0].querySelector('.dpick-n b').textContent);
-  ok(rows2[0].textContent.indexOf('цвет метки на этой клетке') >= 0, 'строка помечена как «цвет метки на этой клетке»');
-  q('.modal [data-a=cancel]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const sws2 = qa('.modal .mm-sw');
+  ok(sws2.length === 4 && sws2[0].dataset.c === '1',
+    'на клетке с меткой первым предложен её цвет: ' + sws2.map(b => b.dataset.c).join(','));
+  ok(q('.modal p.hint').textContent.indexOf('Цвет метки на этой клетке предлагается первым') >= 0,
+    'меню объясняет, что первым предложен цвет метки на клетке');
+  q('.modal [data-a=close]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   await wait(20);
-  ok(App.G.modal === null, '«Отмена» закрывает окно цвета меток');
+  ok(App.G.modal === null, '«Готово» закрывает меню цвета меток');
   clearM();
 
   console.log('\n— 3.2: перекраска метки применяется мгновенно —');
@@ -310,8 +395,8 @@ function boot(withBridge) {
   ok(marks().length === 0, 'короткий правый клик в режиме дизайнера метку не рисует');
   pev('pointerdown', bsq('e2'), 450, 650, 2);
   await wait(620);
-  ok(App.G.modal !== null && q('.modal h2').textContent.indexOf('Цвет стрелок и меток') >= 0,
-    'удержание в режиме дизайнера открывает то же окно цвета меток');
+  ok(App.G.modal !== null && q('.modal h2').textContent.indexOf('Стрелки и метки') >= 0,
+    'удержание в режиме дизайнера открывает то же меню «Стрелки и метки»');
   ok(marks().length === 0, 'метки по-прежнему не рисуются');
   doc.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
   await wait(30);
@@ -405,11 +490,9 @@ function boot(withBridge) {
     'на архив приложение отвечает внятным отказом: ' + dq('#toastWrap').textContent.slice(0, 70));
   ok(dq('#rodentProgress').textContent === '', 'сообщение «Читаем файл…» не зависло');
 
-  console.log('\n— 3.2: рабочая папка процесса в обеих обёртках —');
+  console.log('\n— 3.2: рабочая папка процесса в обёртке —');
   const mainJs = fs.readFileSync(path.join(ROOT, 'desktop/main.js'), 'utf8');
   ok(/cwd: path\.dirname\(exePath\)/.test(mainJs), 'Electron запускает движок с cwd = папка exe');
-  const mainRs = fs.readFileSync(path.join(ROOT, 'desktop/tauri/src/main.rs'), 'utf8');
-  ok(/cmd\.current_dir\(parent\)/.test(mainRs), 'Tauri выставляет current_dir = папка exe (родственные personalities/nets/books)');
 
   console.log('\n— 3.2: справка и ссылки —');
   ok(/release-1-2\.zip/.test(html) && /personalities/.test(html) && /nets/.test(html),
@@ -423,23 +506,16 @@ function boot(withBridge) {
     'правила в справке описывают удержание правой кнопки');
 
   console.log('\n— 3.2: релиз-файлы версии —');
-  ok(V === '3.2', 'version.json: ' + V);
+  ok(V === '3.3', 'version.json: ' + V);
   ok(html.indexOf("var APP_VERSION = '" + V + "'") >= 0, 'версия прошита в index.html');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
   ok(pkg.version === PV, 'desktop/package.json: ' + pkg.version);
-  const tconf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/tauri/tauri.conf.json'), 'utf8'));
-  ok(tconf.version === PV, 'tauri.conf.json: ' + tconf.version);
-  const cargo = fs.readFileSync(path.join(ROOT, 'desktop/tauri/Cargo.toml'), 'utf8');
-  ok(cargo.indexOf('version = "' + PV + '"') >= 0, 'Cargo.toml: ' + PV);
   ok(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8').indexOf('chesster-' + V) >= 0, 'кэш sw.js помечен ' + V);
   const bat = fs.readFileSync(path.join(ROOT, 'push-release.bat'), 'utf8');
-  ok(/git commit -m "Release 3\.2/.test(bat) && bat.indexOf('git tag v' + PV) >= 0,
-    'bat: английский коммит Release 3.2 и тег v' + PV);
+  ok(/git commit -m "Release 3\.3/.test(bat) && bat.indexOf('git tag v' + PV) >= 0,
+    'bat: английский коммит Release 3.3 и тег v' + PV);
   ok(!/[^\x09\x0a\x0d\x20-\x7e]/.test(bat), 'bat: только ASCII');
-  ok(DA.CHANGELOG[0][0] === '3.2', 'история изменений начинается с 3.2');
-  const distIndex = path.join(ROOT, 'desktop/tauri/dist/index.html');
-  ok(fs.existsSync(distIndex) && fs.readFileSync(distIndex, 'utf8') === html,
-    'desktop/tauri/dist/index.html совпадает с корневым');
+  ok(DA.CHANGELOG[0][0] === '3.3', 'история изменений начинается с 3.3');
   ok(d.errors.length === 0, 'десктоп-сессия без ошибок консоли' + (d.errors.length ? ': ' + d.errors.join(' | ') : ''));
 
   console.log('\n============================');

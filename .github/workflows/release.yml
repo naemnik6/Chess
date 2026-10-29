@@ -37,6 +37,25 @@ jobs:
       - name: Зависимости обёртки
         working-directory: desktop
         run: npm install
+      - name: Скачать Rodent V (GPL) для предустановки
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rel = Invoke-RestMethod 'https://api.github.com/repos/nescitus/Rodent-V/releases/latest'
+          $asset = $rel.assets | Where-Object { $_.name -like 'release-*.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'Rodent V asset (release-*.zip) not found' }
+          Invoke-WebRequest $asset.browser_download_url -OutFile rodent.zip
+          Expand-Archive rodent.zip -DestinationPath engine-tmp -Force
+          New-Item -ItemType Directory -Force engine\rodent | Out-Null
+          Copy-Item engine-tmp\rodent_v_1.2.exe engine\rodent\
+          Copy-Item engine-tmp\personalities engine\rodent\ -Recurse -Force
+          Copy-Item engine-tmp\nets engine\rodent\ -Recurse -Force
+          Copy-Item engine-tmp\books engine\rodent\ -Recurse -Force
+          Copy-Item engine-tmp\MANUAL.md engine\rodent\ -Force -ErrorAction SilentlyContinue
+          Invoke-WebRequest 'https://www.gnu.org/licenses/gpl-3.0.txt' -OutFile engine\rodent\LICENSE-GPL.txt
+          Set-Content engine\rodent\NOTICE.txt 'Rodent V chess engine (GPL-3.0), (C) nescitus. Source: https://github.com/nescitus/Rodent-V - bundled as a separate program. License text: LICENSE-GPL.txt.'
+          Remove-Item rodent.zip -Force
+          Remove-Item engine-tmp -Recurse -Force
       - name: Собрать и опубликовать релиз
         working-directory: desktop
         run: npx electron-builder --win --publish always

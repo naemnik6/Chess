@@ -426,7 +426,7 @@
     return stop().then(function () {
       return P.spawnEngine(exePath);
     }).then(function (res) {
-      /* Electron отвечает {ok,pid}, Tauri — просто pid: приводим к одному виду */
+      /* обёртка отвечает {ok,pid}; на всякий случай нормализуем и голый pid */
       var pid = (typeof res === 'number') ? res : (res && res.pid);
       if (res && res.ok === false) throw new Error(res.error || 'не удалось запустить движок');
       if (res === null || res === undefined || res === false) throw new Error('обёртка не ответила на запуск движка');

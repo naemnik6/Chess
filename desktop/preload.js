@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('Chesster', {
   onEngineError: (cb) => {
     ipcRenderer.on('engine:error', (_e, msg) => cb(msg));
   },
+  /* 3.3: путь к Rodent V, предустановленному установщиком (или null) */
+  bundledEnginePath: () => ipcRenderer.invoke('engine:bundled'),
 
   /* архив партий файлом на устройстве (десктоп) */
   archiveRead: () => ipcRenderer.sendSync('store:readArchive'),

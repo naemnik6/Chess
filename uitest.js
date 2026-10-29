@@ -1,14 +1,14 @@
 /* Смоук-тест интерфейса в jsdom: клики по доске, объявления, кнопки, бот */
 const fs = require('fs');
-let JSDOM;
-try { ({ JSDOM } = require('jsdom')); }
-catch (e) { ({ JSDOM } = require('/tmp/node_modules/jsdom')); }
+let JSDOM, VirtualConsole;
+try { ({ JSDOM, VirtualConsole } = require('jsdom')); }
+catch (e) { ({ JSDOM, VirtualConsole } = require('/tmp/node_modules/jsdom')); }
 
 const html = fs.readFileSync(__dirname + '/index.html', 'utf8');
 const errors = [];
 const dom = new JSDOM(html, {
   runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
-  virtualConsole: new (require('/tmp/node_modules/jsdom').VirtualConsole)()
+  virtualConsole: new VirtualConsole()
     .on('jsdomError', e => { errors.push('jsdomError: ' + e.message + (e.stack ? '\n' + e.stack.split('\n').slice(0, 4).join('\n') : '')); console.log('  !! ОШИБКА В КОДЕ: ' + e.message); })
     .on('error', (...a) => { errors.push('console.error: ' + a.join(' ')); console.log('  !! console.error: ' + a.join(' ')); })
 });

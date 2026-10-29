@@ -1,3 +1,0 @@
-# Rust/Tauri build artefacts - never commit these
-/target/
-/gen/schemas/

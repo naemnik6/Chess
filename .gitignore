@@ -1,0 +1,5 @@
+# 3.3: служебные и генерируемые папки
+node_modules/
+engine/
+bundle.txt
+desktop/dist/
