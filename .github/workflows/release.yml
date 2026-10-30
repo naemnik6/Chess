@@ -41,19 +41,36 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $rel = Invoke-RestMethod 'https://api.github.com/repos/nescitus/Rodent-V/releases/latest'
-          $asset = $rel.assets | Where-Object { $_.name -like 'release-*.zip' } | Select-Object -First 1
-          if (-not $asset) { throw 'Rodent V asset (release-*.zip) not found' }
-          Invoke-WebRequest $asset.browser_download_url -OutFile rodent.zip
+          $UA = @{ 'User-Agent' = 'chesster-ci' }
+          $rel = Invoke-RestMethod 'https://api.github.com/repos/nescitus/Rodent-V/releases/latest' -Headers $UA
+          $asset = $rel.assets | Where-Object { $_.name -like '*.zip' -and $_.name -notlike '*source*' } | Select-Object -First 1
+          if (-not $asset) { throw "Rodent V release asset (.zip) not found among: $($rel.assets.name -join ', ')" }
+          Write-Host "Asset: $($asset.name) -> $($asset.browser_download_url)"
+          Invoke-WebRequest $asset.browser_download_url -OutFile rodent.zip -Headers $UA
           Expand-Archive rodent.zip -DestinationPath engine-tmp -Force
+          # В архиве может быть верхнеуровневая папка, а имя exe содержит версию:
+          # ищем рекурсивно обычный rodent*.exe (без вариантов _Tal и _testers).
+          $exe = Get-ChildItem engine-tmp -Recurse -File |
+            Where-Object { $_.Name -match '^rodent.*\.exe$' -and $_.Name -notmatch '_?(Tal|testers)' } |
+            Sort-Object Name | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host '--- archive contents ---'
+            Get-ChildItem engine-tmp -Recurse | ForEach-Object { Write-Host $_.FullName }
+            throw 'Rodent V exe not found in the release archive'
+          }
+          Write-Host "Engine exe: $($exe.FullName)"
           New-Item -ItemType Directory -Force engine\rodent | Out-Null
-          Copy-Item engine-tmp\rodent_v_1.2.exe engine\rodent\
-          Copy-Item engine-tmp\personalities engine\rodent\ -Recurse -Force
-          Copy-Item engine-tmp\nets engine\rodent\ -Recurse -Force
-          Copy-Item engine-tmp\books engine\rodent\ -Recurse -Force
-          Copy-Item engine-tmp\MANUAL.md engine\rodent\ -Force -ErrorAction SilentlyContinue
-          Invoke-WebRequest 'https://www.gnu.org/licenses/gpl-3.0.txt' -OutFile engine\rodent\LICENSE-GPL.txt
-          Set-Content engine\rodent\NOTICE.txt 'Rodent V chess engine (GPL-3.0), (C) nescitus. Source: https://github.com/nescitus/Rodent-V - bundled as a separate program. License text: LICENSE-GPL.txt.'
+          Copy-Item $exe.FullName engine\rodent\
+          foreach ($dir in 'personalities', 'nets', 'books') {
+            $src = Get-ChildItem engine-tmp -Recurse -Directory | Where-Object { $_.Name -eq $dir } | Select-Object -First 1
+            if ($src) { Copy-Item $src.FullName engine\rodent\ -Recurse -Force } else { Write-Host "warning: folder $dir not found" }
+          }
+          $man = Get-ChildItem engine-tmp -Recurse -File | Where-Object { $_.Name -eq 'MANUAL.md' } | Select-Object -First 1
+          if ($man) { Copy-Item $man.FullName engine\rodent\ -Force }
+          Invoke-WebRequest 'https://www.gnu.org/licenses/gpl-3.0.txt' -OutFile engine\rodent\LICENSE-GPL.txt -Headers $UA
+          Set-Content engine\rodent\NOTICE.txt "Rodent V chess engine (GPL-3.0), (C) nescitus. Source: https://github.com/nescitus/Rodent-V - bundled as a separate program (file: $($exe.Name)). License text: LICENSE-GPL.txt."
+          Write-Host '--- engine/rodent packed ---'
+          Get-ChildItem engine\rodent -Recurse | ForEach-Object { Write-Host $_.FullName }
           Remove-Item rodent.zip -Force
           Remove-Item engine-tmp -Recurse -Force
       - name: Собрать и опубликовать релиз

@@ -276,9 +276,17 @@ ipcMain.handle('engine:pick', async () => {
 ipcMain.handle('engine:bundled', async () => {
   try {
     const dir = path.join(process.resourcesPath, 'engine');
+    /* точные имена — для предсказуемости; затем любой rodent*.exe без
+       вариантов _Tal/_testers (имя в архиве релиза содержит версию) */
     for (const name of ['rodent_v_1.2.exe', 'rodent_v.exe', 'rodent.exe']) {
       const p = path.join(dir, name);
       if (fs.existsSync(p)) return p;
+    }
+    if (fs.existsSync(dir)) {
+      const found = fs.readdirSync(dir)
+        .filter((f) => /^rodent.*\.exe$/i.test(f) && !/_?(tal|testers)/i.test(f))
+        .sort();
+      if (found.length) return path.join(dir, found[0]);
     }
   } catch (e) { /* не упаковано или нет доступа — предустановки нет */ }
   return null;
